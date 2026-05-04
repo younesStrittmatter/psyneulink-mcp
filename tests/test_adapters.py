@@ -134,6 +134,9 @@ def test_claude_cli_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_claude_cli_generate_pipes_prompt_and_returns_spec(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """End-to-end shape using the wrapper format the live CLI emits when
+    --json-schema is set: structured_output holds the parsed object and
+    `result` is empty."""
     captured: dict[str, Any] = {}
 
     def fake_run(argv, *, input, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
@@ -143,7 +146,13 @@ def test_claude_cli_generate_pipes_prompt_and_returns_spec(
         return subprocess.CompletedProcess(
             args=argv,
             returncode=0,
-            stdout=json.dumps({"type": "result", "result": json.dumps(VALID_SPEC)}),
+            stdout=json.dumps(
+                {
+                    "type": "result",
+                    "result": "",
+                    "structured_output": VALID_SPEC,
+                }
+            ),
             stderr="",
         )
 
@@ -216,7 +225,16 @@ def test_claude_cli_generate_raises_on_invalid_json(
 # --------------------------------------------------------------------------- #
 
 
+def test_parse_cli_output_prefers_structured_output() -> None:
+    """The live CLI puts schema-validated output here when --json-schema is set."""
+    stdout = json.dumps(
+        {"type": "result", "result": "", "structured_output": VALID_SPEC}
+    )
+    assert _parse_cli_output(stdout) == VALID_SPEC
+
+
 def test_parse_cli_output_handles_string_result() -> None:
+    """Legacy fallback: --output-format json without --json-schema."""
     stdout = json.dumps({"type": "result", "result": json.dumps(VALID_SPEC)})
     assert _parse_cli_output(stdout) == VALID_SPEC
 
@@ -234,6 +252,14 @@ def test_parse_cli_output_handles_bare_object() -> None:
 def test_parse_cli_output_raises_on_empty() -> None:
     with pytest.raises(AdapterError, match="empty"):
         _parse_cli_output("")
+
+
+def test_parse_cli_output_raises_on_empty_result_no_structured() -> None:
+    """If --json-schema fails to populate structured_output AND result is empty,
+    surface a clear error rather than letting json.loads crash on '' input."""
+    stdout = json.dumps({"type": "result", "result": ""})
+    with pytest.raises(AdapterError, match="empty `result` field"):
+        _parse_cli_output(stdout)
 
 
 # --------------------------------------------------------------------------- #

@@ -126,10 +126,17 @@ def _parse_cli_output(stdout: str) -> Any:
     """Extract the structured-output payload from the CLI's JSON wrapper.
 
     With ``--output-format json`` the CLI wraps its response in
-    ``{"type": "result", "result": <payload>, ...}``. With
-    ``--json-schema`` set, ``payload`` is the model's JSON output —
-    sometimes already a parsed object, sometimes a JSON string. Both
-    shapes are accepted here.
+    ``{"type": "result", "result": "...", "structured_output": {...}, ...}``.
+
+    Precedence:
+
+    1. ``structured_output`` if present and non-empty — this is the
+       schema-validated payload that ``--json-schema`` populates. The
+       ``result`` field is typically empty when ``--json-schema`` is set.
+    2. ``result`` otherwise — accepted as a parsed object or as a JSON
+       string that we then parse.
+    3. The wrapper itself, for the rare case where stdout is the bare
+       ToolSpec.
     """
     text = stdout.strip()
     if not text:
@@ -142,12 +149,20 @@ def _parse_cli_output(stdout: str) -> Any:
             f"first 200 chars: {text[:200]!r}"
         ) from e
 
+    if isinstance(wrapper, dict) and wrapper.get("structured_output"):
+        return wrapper["structured_output"]
+
     if isinstance(wrapper, dict) and "result" in wrapper:
         payload = wrapper["result"]
     else:
         payload = wrapper
 
     if isinstance(payload, str):
+        if not payload.strip():
+            raise AdapterError(
+                "`claude` returned an empty `result` field and no "
+                "`structured_output`. Has the CLI flag set changed?"
+            )
         try:
             payload = json.loads(payload)
         except json.JSONDecodeError as e:
