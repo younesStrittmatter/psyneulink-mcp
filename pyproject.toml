@@ -9,8 +9,15 @@ dependencies = [
     "pyyaml>=6",
 ]
 
+[project.optional-dependencies]
+# Only required when using the Anthropic API adapter for build-time codegen.
+# The default `claude_cli` adapter shells out to the local `claude` CLI and
+# does not need this dep, so the install stays lean.
+anthropic-api = ["anthropic>=0.40"]
+
 [project.scripts]
-psyneulink-mcp = "psyneulink_mcp.server:main"
+psyneulink-mcp           = "psyneulink_mcp.server:main"
+psyneulink-mcp-generate  = "psyneulink_mcp.generator.orchestrator:main"
 
 [dependency-groups]
 dev = [
@@ -35,3 +42,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "integration: hits real LLM / real PNL imports; slow + costs money",
+]
