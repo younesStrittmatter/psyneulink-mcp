@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0",
     "psyneulink",
+    "pyyaml>=6",
 ]
 
 [project.scripts]

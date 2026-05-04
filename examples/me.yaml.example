@@ -1,0 +1,30 @@
+# Personal brainlike profile, read by the `get_my_brainlike_view` MCP tool.
+#
+# Copy to one of:
+#   ~/.config/psyneulink-mcp/me.yaml          (default)
+#   $XDG_CONFIG_HOME/psyneulink-mcp/me.yaml   (if you set XDG_CONFIG_HOME)
+#   wherever $PSYNEULINK_MCP_PERSONAL_PROFILE points (highest precedence)
+#
+# Edit it with your own editor — the MCP intentionally cannot write here.
+# Empty / missing file is fine; the tool will return an empty view and the
+# agent will fall back to community definitions only.
+#
+# Schema mirrors `community/brainlike/_schema.yaml` in psyneulink-corpus,
+# minus the `id` and `contributor` fields (this is yours, not shared).
+
+title: My personal brainlike preferences
+
+description: >
+  What I, personally, consider "brainlike" when modeling. The agent should
+  weight these above community views when modeling for me.
+
+predicates:
+  - "Mechanism activations follow leaky-integrator dynamics."
+  - "Inhibition between competing alternatives is implemented explicitly."
+  - "Learning signals are local where biologically plausible."
+
+# Optional: PsyNeuLink configurations or snippets that exemplify the above.
+examples: []
+
+# Optional: papers / URLs that ground these preferences.
+references: []

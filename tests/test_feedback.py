@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from psyneulink_mcp import feedback
+from psyneulink_mcp import corpus, feedback
 from psyneulink_mcp.feedback import (
     captured_tool,
     log_agent_report,
@@ -17,6 +17,8 @@ from psyneulink_mcp.feedback import (
 from psyneulink_mcp.tools.curated import feedback as curated_feedback
 from scripts.generate_tools import (
     archive_pending,
+    consumed_issue_numbers,
+    gather_feedback,
     group_by_tool,
     read_pending,
 )
@@ -238,3 +240,83 @@ def test_archive_pending_noop_when_empty(tmp_path) -> None:
 
     assert archive_pending(pending, archive_root) is None
     assert not archive_root.exists()
+
+
+# ---- gather_feedback (local + corpus merge) ---------------------------------
+
+
+def _local_jsonl(path: Path, entries: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(e) + "\n" for e in entries),
+        encoding="utf-8",
+    )
+
+
+def test_gather_feedback_merges_local_and_remote(tmp_path) -> None:
+    pending = tmp_path / "issues.jsonl"
+    _local_jsonl(
+        pending,
+        [
+            {"tool_name": "tool_a", "source": "auto", "payload": {}},
+            {"tool_name": "tool_b", "source": "agent", "payload": {}},
+        ],
+    )
+
+    def fake_remote() -> list[dict[str, Any]]:
+        return [
+            {
+                "tool_name": "tool_a",
+                "source": "human-github",
+                "payload": {"issue_number": 11},
+            },
+            {
+                "tool_name": "tool_c",
+                "source": "human-github",
+                "payload": {"issue_number": 12},
+            },
+        ]
+
+    merged = gather_feedback(pending_path=pending, fetch_remote=fake_remote)
+
+    assert sorted(merged) == ["tool_a", "tool_b", "tool_c"]
+    assert len(merged["tool_a"]) == 2  # local + remote on the same tool
+    assert {e["source"] for e in merged["tool_a"]} == {"auto", "human-github"}
+
+
+def test_gather_feedback_falls_back_to_local_on_corpus_failure(
+    tmp_path, capsys
+) -> None:
+    pending = tmp_path / "issues.jsonl"
+    _local_jsonl(pending, [{"tool_name": "tool_a", "source": "auto", "payload": {}}])
+
+    def boom() -> list[dict[str, Any]]:
+        raise corpus.CorpusUnavailable("test: gh not authenticated")
+
+    merged = gather_feedback(pending_path=pending, fetch_remote=boom)
+
+    assert list(merged) == ["tool_a"]
+    assert "corpus unavailable" in capsys.readouterr().err
+
+
+def test_gather_feedback_empty_when_both_sources_empty(tmp_path) -> None:
+    pending = tmp_path / "issues.jsonl"
+    pending.parent.mkdir(parents=True, exist_ok=True)
+    pending.write_text("")
+
+    merged = gather_feedback(pending_path=pending, fetch_remote=lambda: [])
+    assert merged == {}
+
+
+def test_consumed_issue_numbers_extracts_only_human_github(tmp_path) -> None:
+    feedback_by_tool = {
+        "tool_a": [
+            {"source": "auto", "payload": {}},  # local crash, no issue number
+            {"source": "human-github", "payload": {"issue_number": 11}},
+            {"source": "human-github", "payload": {"issue_number": 11}},  # dup
+        ],
+        "tool_b": [
+            {"source": "human-github", "payload": {"issue_number": 12}},
+        ],
+    }
+    assert consumed_issue_numbers(feedback_by_tool) == [11, 12]

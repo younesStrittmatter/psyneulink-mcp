@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from .tools.curated import brainlike as curated_brainlike
 from .tools.curated import feedback as curated_feedback
 
 mcp = FastMCP("psyneulink-mcp")
 
 curated_feedback.register(mcp)
+curated_brainlike.register(mcp)
 
 
 def main() -> None:
