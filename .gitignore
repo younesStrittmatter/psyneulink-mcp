@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+.DS_Store
+
+# Per-developer Claude Code state (project-wide config goes in settings.json,
+# which IS committed; settings.local.json holds local permission grants etc.)
+.claude/settings.local.json
