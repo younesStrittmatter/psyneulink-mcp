@@ -48,6 +48,35 @@ Each repo does one thing. Cross-repo writes are forbidden:
 If a feature seems to need to live in two repos, that's a signal the 
 design is wrong, not that we should make an exception.
 
+## Multi-repo dev sessions: switch workspace first
+
+A *multi-repo dev session* authors changes in more than one of the
+three sibling repos in one sitting (e.g., spawning subagents that
+operate in `../psyneulink-corpus/` or `../psyneulink-agent/`, or
+coordinating a label rename that has to land in two repos together).
+
+If you find you need one, **stop and ask the user to open a new Cursor
+chat at the parent folder**:
+
+```
+~/Documents/code/AutoGrad/psyneulink-ai/
+```
+
+That folder has its own `AGENTS.md` and is the correct workspace for
+multi-repo dev sessions. The shell sandbox restricts writes to the
+workspace root; running cross-repo writes from this sub-repo workspace
+forces a permission prompt for every shell call into a sibling. Don't
+work around it with `required_permissions: ["all"]` — switch workspaces
+once, work freely thereafter.
+
+This is *not* the same as the forbidden cross-repo coupling above. A
+multi-repo dev session produces independent commits in independent
+repos that each respect the boundary. **Smell test:** if the work
+would survive being done in two separate chats on different days with
+no shared state, it's a dev-session convenience. If it requires
+runtime/import coupling between repos, the polyrepo rule applies and
+the design is wrong — fix the design.
+
 ## The generator pattern
 
 1. Introspect the `psyneulink` module at build time
