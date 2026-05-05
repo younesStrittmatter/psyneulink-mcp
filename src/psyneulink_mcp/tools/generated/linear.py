@@ -10,36 +10,36 @@ import psyneulink as pnl
 from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
-__source_sha256__ = 'b37a9a3a746dcd09d3a00b9e7b14948d4b3bc4811b7c3e03b834d9ef21c6c2c1'
+__source_sha256__ = '98a322b7bad6dbebd82235eb389ad02207232c77e75965068ae21b25a6cd8553'
 __pnl_qualname__ = 'psyneulink.Linear'
 __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_linear'
-TOOL_DESCRIPTION = 'Use this tool to create a PsyNeuLink Linear transfer function that applies the transform `scale * (slope * variable + intercept) + offset`. Call it when you need a parameterized linear mapping for a Mechanism\'s function — for example, to scale activations, shift baselines, or compose a gain+bias transform. The result is a Linear Function object that can be assigned to a Mechanism\'s `function` argument.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "intercept": {\n      "default": 0,\n      "description": "Additive bias applied to the input variable after multiplying by slope.",\n      "type": "number"\n    },\n    "name": {\n      "description": "Optional name for this Function instance. Defaults to a registry-generated name.",\n      "type": "string"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Additive shift applied after scale. Displaces the entire linear output.",\n      "type": "number"\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplier applied to the result of slope*variable+intercept. Amplifies the entire linear output.",\n      "type": "number"\n    },\n    "slope": {\n      "default": 1,\n      "description": "Multiplicative gain applied to the input variable before adding intercept.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nAll four parameters default to values that implement the identity function (slope=1, intercept=0, scale=1, offset=0); PsyNeuLink may silently replace a default-parameter Linear with the Identity Function during compilation. scale and offset are NOT equivalent to slope and intercept: slope and intercept transform the variable first, then scale multiplies the intermediate result and offset shifts it — so scale*slope is the effective gain, not just slope. The derivative method returns scale*slope, not slope alone. default_variable is omitted from the schema because it is inferred from the owning Mechanism at runtime; only pass it if you need an explicit shape template.'
+TOOL_DESCRIPTION = 'Call this tool to create a `psyneulink.Linear` transfer function that applies `scale * (slope * variable + intercept) + offset` element-wise to its input. Use it when assigning a linear activation function to a TransferMechanism or any PsyNeuLink component that accepts a `function` argument. Returns a configured `Linear` instance ready for assignment.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "intercept": {\n      "default": 0,\n      "description": "Value added to slope*variable before scale is applied.",\n      "type": "number"\n    },\n    "name": {\n      "description": "Optional name for this Linear function instance.",\n      "type": "string"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Value added after scale is applied; shifts the output up or down.",\n      "type": "number"\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplier applied to the entire (slope*variable + intercept) result before adding offset.",\n      "type": "number"\n    },\n    "slope": {\n      "default": 1,\n      "description": "Multiplicative factor applied to the variable before adding intercept.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nWith all defaults (slope=1, intercept=0, scale=1, offset=0) this implements the identity function and PNL may silently replace it with an `Identity` function during compilation — if you need a true Linear instance to persist (e.g., to modulate slope at runtime), set at least one parameter to a non-identity value. `scale` and `offset` are NOT equivalent to `slope` and `intercept`: the former pair is applied after the latter, so `scale=2, slope=1` differs from `scale=1, slope=2` when `intercept != 0`. The `default_variable`, `params`, `owner`, and `prefs` arguments are managed by the host template and should not be passed by the agent.'
 TOOL_PARAMETERS = { 'properties': { 'intercept': { 'default': 0,
-                                 'description': 'Additive bias applied to the input '
-                                                'variable after multiplying by slope.',
+                                 'description': 'Value added to slope*variable before '
+                                                'scale is applied.',
                                  'type': 'number'},
-                  'name': { 'description': 'Optional name for this Function instance. '
-                                           'Defaults to a registry-generated name.',
+                  'name': { 'description': 'Optional name for this Linear function '
+                                           'instance.',
                             'type': 'string'},
                   'offset': { 'default': 0,
-                              'description': 'Additive shift applied after scale. '
-                                             'Displaces the entire linear output.',
+                              'description': 'Value added after scale is applied; '
+                                             'shifts the output up or down.',
                               'type': 'number'},
                   'scale': { 'default': 1,
-                             'description': 'Multiplier applied to the result of '
-                                            'slope*variable+intercept. Amplifies the '
-                                            'entire linear output.',
+                             'description': 'Multiplier applied to the entire '
+                                            '(slope*variable + intercept) result '
+                                            'before adding offset.',
                              'type': 'number'},
                   'slope': { 'default': 1,
-                             'description': 'Multiplicative gain applied to the input '
+                             'description': 'Multiplicative factor applied to the '
                                             'variable before adding intercept.',
                              'type': 'number'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = 'All four parameters default to values that implement the identity function (slope=1, intercept=0, scale=1, offset=0); PsyNeuLink may silently replace a default-parameter Linear with the Identity Function during compilation. scale and offset are NOT equivalent to slope and intercept: slope and intercept transform the variable first, then scale multiplies the intermediate result and offset shifts it — so scale*slope is the effective gain, not just slope. The derivative method returns scale*slope, not slope alone. default_variable is omitted from the schema because it is inferred from the owning Mechanism at runtime; only pass it if you need an explicit shape template.'
+TOOL_NOTES = 'With all defaults (slope=1, intercept=0, scale=1, offset=0) this implements the identity function and PNL may silently replace it with an `Identity` function during compilation — if you need a true Linear instance to persist (e.g., to modulate slope at runtime), set at least one parameter to a non-identity value. `scale` and `offset` are NOT equivalent to `slope` and `intercept`: the former pair is applied after the latter, so `scale=2, slope=1` differs from `scale=1, slope=2` when `intercept != 0`. The `default_variable`, `params`, `owner`, and `prefs` arguments are managed by the host template and should not be passed by the agent.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -64,5 +64,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_linear(args: dict[str, Any] | None = None) -> Any:
-        'Use this tool to create a PsyNeuLink Linear transfer function that applies the transform `scale * (slope * variable + intercept) + offset`.'
+        'Call this tool to create a `psyneulink.Linear` transfer function that applies `scale * (slope * variable + intercept) + offset` element-wise to its input.'
         return _impl(args or {})
