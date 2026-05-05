@@ -186,6 +186,69 @@ def test_path_must_end_in_py(tools, tmp_path):
         )
 
 
+def test_dry_run_returns_text_without_writing_file(tools, tmp_path):
+    """``dry_run=True`` is the live-preview path: render the script and
+    hand back the text *without* persisting anything. Front-ends like the
+    UI's code pane poll this on every composition revision; an actual
+    write per poll would litter ``~/Documents/psyneulink-models/`` with
+    junk files (and race the same default path).
+    """
+    h_in = _make_transfer_via_generated("dry_in")
+    h_out = _make_transfer_via_generated("dry_out")
+    h_comp = _make_composition_via_generated("dry_comp")
+    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+
+    sentinel_path = tmp_path / "should_not_be_written.py"
+
+    result = tools["export_python_script"](
+        composition=h_comp, path=str(sentinel_path), dry_run=True
+    )
+
+    assert result["path"] is None
+    assert "import psyneulink as pnl" in result["text"]
+    assert "dry_in" in result["text"]
+    assert "dry_out" in result["text"]
+    assert result["n_objects"] == 3  # 2 mechanisms + 1 composition
+    assert result["n_operations"] == 1
+    # ``path`` was supplied but dry_run takes precedence — nothing on disk.
+    assert not sentinel_path.exists()
+    # Default-path branch is also skipped.
+    assert not (_default_export_dir := tmp_path / "models").exists()
+
+
+def test_dry_run_without_path_does_not_create_default_dir(tools, tmp_path, monkeypatch):
+    """Even without ``path``, dry_run must not touch the default export dir."""
+    monkeypatch.setattr(
+        curated_persistence, "_DEFAULT_EXPORT_DIR", tmp_path / "untouched"
+    )
+    h_comp = _make_composition_via_generated("nopath_dry")
+
+    result = tools["export_python_script"](composition=h_comp, dry_run=True)
+
+    assert result["path"] is None
+    assert "import psyneulink as pnl" in result["text"]
+    assert not (tmp_path / "untouched").exists()
+
+
+def test_dry_run_text_matches_real_export(tools, tmp_path):
+    """``dry_run=True`` renders byte-for-byte the same script the
+    write-to-disk path would produce. If the two ever drift, the live
+    preview pane would lie about what saving the model produces."""
+    h_in = _make_transfer_via_generated("parity_in")
+    h_out = _make_transfer_via_generated("parity_out")
+    h_comp = _make_composition_via_generated("parity_comp")
+    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+
+    real = tools["export_python_script"](
+        composition=h_comp, path=str(tmp_path / "real.py")
+    )
+    dry = tools["export_python_script"](composition=h_comp, dry_run=True)
+
+    assert dry["text"] == real["text"]
+    assert dry["n_objects"] == real["n_objects"]
+    assert dry["n_operations"] == real["n_operations"]
+
+
 def test_filter_excludes_unrelated_objects(tools, tmp_path):
     h_in = _make_transfer_via_generated("filtered_in")
     h_out = _make_transfer_via_generated("filtered_out")

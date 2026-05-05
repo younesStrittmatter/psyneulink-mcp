@@ -652,6 +652,7 @@ def register(mcp: Any) -> None:
     def export_python_script(
         composition: str | None = None,
         path: str | None = None,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
         """Render the current session as a runnable ``.py`` file.
 
@@ -672,18 +673,36 @@ def register(mcp: Any) -> None:
                 Omit to dump the entire session.
             path: Optional output path. Must end in ``.py``. Defaults
                 to ``~/Documents/psyneulink-models/<name>-<UTC>.py``.
-                Parent directories are created as needed.
+                Parent directories are created as needed. Ignored when
+                ``dry_run=True``.
+            dry_run: When ``True``, render the script and return its
+                ``text`` *without writing anything to disk*. ``path``
+                in the result will be ``None``. This is the path
+                front-ends use for live preview panes (e.g. the web
+                UI's code pane that polls every revision tick) where
+                the goal is "show me what export would produce" rather
+                than "persist a model artifact". Defaults to ``False``
+                so the historical write-to-disk behaviour is preserved.
 
         Returns:
-            ``{"path": <abs str>, "text": <full source>,
+            ``{"path": <abs str | None>, "text": <full source>,
             "n_objects": <int>, "n_operations": <int>}``.
             ``text`` is included so the agent can preview the script
-            without a second tool call.
+            without a second tool call. ``path`` is ``None`` in dry-run
+            mode.
         """
         snapshot = handles.journal_snapshot()
         filtered = _filter_for_composition(snapshot, composition)
 
         text, n_objects, n_operations = _render_script(filtered, composition)
+
+        if dry_run:
+            return {
+                "path": None,
+                "text": text,
+                "n_objects": n_objects,
+                "n_operations": n_operations,
+            }
 
         if path is None:
             comp_label = "session"
