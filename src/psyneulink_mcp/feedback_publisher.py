@@ -53,6 +53,15 @@ _MAX_TITLE_MSG_CHARS = 80
 
 # Process-scoped dedup cache. Tuple shape: (tool_name, exc_type, msg_sha1).
 _SEEN: set[tuple[str, str, str]] = set()
+# Per-process cache of ``pnl:<tool_name>`` labels we've already
+# self-healed (created or confirmed-exists). One entry means "we've
+# successfully ensured this label exists in the corpus during this
+# process; don't waste a `gh label create` call on it again." The
+# ``_attempted`` cache tracks labels we've TRIED to heal but failed
+# on, so a second consecutive miss for the same label gives up
+# instead of looping forever.
+_HEALED_LABELS: set[str] = set()
+_HEAL_ATTEMPTED: set[str] = set()
 _LOCK = threading.Lock()
 
 
@@ -60,6 +69,8 @@ def reset_for_tests() -> None:
     """Clear the dedup cache. Call from test fixtures so each test is isolated."""
     with _LOCK:
         _SEEN.clear()
+        _HEALED_LABELS.clear()
+        _HEAL_ATTEMPTED.clear()
 
 
 def _truthy_env(name: str, default: bool = True) -> bool:
@@ -89,9 +100,7 @@ def _normalize_message(msg: str) -> str:
 
 
 def _msg_hash(msg: str) -> str:
-    return hashlib.sha1(
-        _normalize_message(msg).encode("utf-8", errors="replace")
-    ).hexdigest()
+    return hashlib.sha1(_normalize_message(msg).encode("utf-8", errors="replace")).hexdigest()
 
 
 def _triple_from_entry(entry: dict[str, Any]) -> tuple[str, str, str] | None:
@@ -144,9 +153,7 @@ def _body_for(entry: dict[str, Any]) -> str:
 
     # Tail of the traceback is the useful bit (innermost frames).
     if len(traceback_text) > _MAX_TRACEBACK_CHARS:
-        traceback_text = (
-            "... (truncated)\n" + traceback_text[-_MAX_TRACEBACK_CHARS:]
-        )
+        traceback_text = "... (truncated)\n" + traceback_text[-_MAX_TRACEBACK_CHARS:]
 
     description = (
         f"**{exc_type}**: {exc_msg}\n\n"
@@ -154,9 +161,7 @@ def _body_for(entry: dict[str, Any]) -> str:
         f"**Traceback (truncated):**\n```\n{traceback_text}\n```"
     )
 
-    agent_context = (
-        f"auto-captured runtime error from psyneulink-mcp v{server_version}"
-    )
+    agent_context = f"auto-captured runtime error from psyneulink-mcp v{server_version}"
 
     return (
         f"### Tool name\n\n{tool}\n\n"
@@ -172,6 +177,59 @@ def _stderr(msg: str) -> None:
         print(f"[psyneulink-mcp] feedback-publisher: {msg}", file=sys.stderr)
 
 
+def _looks_like_missing_label(error_message: str, label: str) -> bool:
+    """Heuristic — did `gh issue create` fail because ``label`` doesn't exist?
+
+    `gh` reports missing labels with stderr like::
+
+        could not add label: 'pnl:create_lca_mechanism' not found
+
+    or::
+
+        'pnl:foo' not found
+
+    Match both shapes (and a few near-equivalents) so the self-heal
+    triggers reliably. False positives are cheap — at worst we make
+    one extra ``gh label create`` call for an unrelated failure;
+    false negatives mean a stuck per-symbol label, so err generous.
+    """
+    msg = error_message.lower()
+    if label.lower() in msg and "not found" in msg:
+        return True
+    return "could not add label" in msg and label.lower() in msg
+
+
+def _try_heal_label(label: str) -> bool:
+    """Best-effort self-heal: ensure ``label`` exists on the corpus.
+
+    Returns ``True`` when the label exists at the end of the call.
+    Returns ``False`` when the heal attempt failed or has already
+    failed once in this process — the caller should not retry the
+    issue create after a ``False`` return (avoids loops).
+    """
+    with _LOCK:
+        if label in _HEALED_LABELS:
+            return True
+        if label in _HEAL_ATTEMPTED:
+            # Second consecutive miss for the same label in one process
+            # — give up rather than loop. The local JSONL still has
+            # the full record.
+            return False
+        _HEAL_ATTEMPTED.add(label)
+    try:
+        corpus.ensure_label_exists(label)
+    except corpus.CorpusUnavailable as e:
+        _stderr(f"label-heal failed for {label}: {e}")
+        return False
+    except Exception as e:  # noqa: BLE001
+        _stderr(f"label-heal raised unexpectedly for {label}: {e!r}")
+        return False
+    with _LOCK:
+        _HEALED_LABELS.add(label)
+    _stderr(f"self-healed missing label {label}")
+    return True
+
+
 def _file(entry: dict[str, Any], triple: tuple[str, str, str]) -> None:
     """Worker body run on the daemon thread. Never raises."""
     try:
@@ -184,15 +242,29 @@ def _file(entry: dict[str, Any], triple: tuple[str, str, str]) -> None:
             return
         if existing is not None:
             return
+
+        symbol_label = corpus.pnl_symbol_label(entry["tool_name"])
+        labels = [corpus.FEEDBACK_LABEL, corpus.AUTO_LABEL, symbol_label]
+
         try:
-            corpus.open_feedback_issue(
-                title=title,
-                body=body,
-                labels=[corpus.FEEDBACK_LABEL, corpus.AUTO_LABEL],
-            )
-        except corpus.CorpusUnavailable as e:
-            _stderr(f"create failed for {triple[0]}/{triple[1]}: {e}")
+            corpus.open_feedback_issue(title=title, body=body, labels=labels)
             return
+        except corpus.CorpusUnavailable as e:
+            # If the failure looks like a missing-label problem for our
+            # per-symbol label, self-heal once and retry exactly once.
+            # Any other failure (rate-limit, auth, unrelated) drops here.
+            err_msg = str(e)
+            if not _looks_like_missing_label(err_msg, symbol_label):
+                _stderr(f"create failed for {triple[0]}/{triple[1]}: {e}")
+                return
+            if not _try_heal_label(symbol_label):
+                _stderr(f"create failed for {triple[0]}/{triple[1]} and label-heal gave up: {e}")
+                return
+            try:
+                corpus.open_feedback_issue(title=title, body=body, labels=labels)
+            except corpus.CorpusUnavailable as retry_err:
+                _stderr(f"create-retry failed for {triple[0]}/{triple[1]}: {retry_err}")
+                return
     except Exception as e:  # noqa: BLE001
         _stderr(f"unexpected publisher failure: {e!r}")
 

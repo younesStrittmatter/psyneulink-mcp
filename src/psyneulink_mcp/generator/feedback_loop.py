@@ -99,6 +99,38 @@ def consumed_issue_numbers(
     return sorted(seen)
 
 
+def gather_historical_failures(
+    tool_names: list[str],
+    fetch=corpus.fetch_historical_failures,
+    *,
+    max_per_tool: int = 5,
+) -> dict[str, list[dict[str, Any]]]:
+    """Closed corpus issues per ``pnl:<tool_name>`` label, filtered + capped.
+
+    For each tool name, calls ``fetch(tool_name, max_results=max_per_tool)``
+    (defaulting to :func:`corpus.fetch_historical_failures`) and stores
+    the result in the returned dict. Tools with no qualifying history
+    are simply omitted (the caller can ``.get(name, [])`` safely).
+
+    A :class:`corpus.CorpusUnavailable` for any single tool degrades to
+    "no historical failures for that tool" with a stderr note — never
+    aborts the whole regen. ``fetch`` is parameterised for tests.
+    """
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name in tool_names:
+        try:
+            failures = fetch(name, max_results=max_per_tool)
+        except corpus.CorpusUnavailable as e:
+            print(
+                f"[generate_tools] historical failures unavailable for {name}: {e}",
+                file=sys.stderr,
+            )
+            continue
+        if failures:
+            out[name] = failures
+    return out
+
+
 def archive_pending(
     pending_path: Path = PENDING_PATH,
     archive_root: Path = ARCHIVE_ROOT,

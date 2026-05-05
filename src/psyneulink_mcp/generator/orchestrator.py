@@ -86,8 +86,7 @@ def _placeholder_spec(symbol: SymbolMeta) -> ToolSpec:
     """
     return {
         "description": (
-            f"TODO: regen with adapter. Placeholder wrapper for "
-            f"{symbol.qualname} ({symbol.kind})."
+            f"TODO: regen with adapter. Placeholder wrapper for {symbol.qualname} ({symbol.kind})."
         ),
         "parameters": {"type": "object", "properties": {}, "required": []},
         "notes": "",
@@ -198,9 +197,7 @@ def _existing_stems(generated_dir: Path) -> list[str]:
     if not generated_dir.is_dir():
         return []
     return sorted(
-        p.stem
-        for p in generated_dir.iterdir()
-        if p.suffix == ".py" and not p.name.startswith("__")
+        p.stem for p in generated_dir.iterdir() if p.suffix == ".py" and not p.name.startswith("__")
     )
 
 
@@ -235,9 +232,71 @@ def _generated_by(adapter: LLMAdapter | None, dry_run: bool) -> str:
     return f"{name}@{model}" if model else name
 
 
+_HISTORICAL_FAILURES_HEADER = "## HISTORICAL FAILURES"
+
+
+def _truncate_one_line(text: str, *, max_chars: int = 240) -> str:
+    """First non-empty line of ``text``, collapsed + truncated for the section."""
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if len(line) > max_chars:
+            return line[: max_chars - 1] + "…"
+        return line
+    return ""
+
+
+def _render_historical_failures_block(
+    failures: list[dict[str, Any]],
+) -> str:
+    """Deterministic markdown block for the closed-issue history of one tool.
+
+    Empty list → empty string (caller skips appending). The block is
+    stable across re-runs given the same closed issues in the same
+    order — that's why ``fetch_historical_failures`` sorts by issue
+    number desc + caps the list before this function ever sees it.
+    """
+    if not failures:
+        return ""
+    lines = [_HISTORICAL_FAILURES_HEADER]
+    for issue in failures:
+        number = issue.get("number") or "?"
+        title = (issue.get("title") or "").strip() or "(no title)"
+        summary = _truncate_one_line(issue.get("body") or "")
+        if summary:
+            lines.append(f"- #{number} — {title}: {summary}")
+        else:
+            lines.append(f"- #{number} — {title}")
+    return "\n".join(lines)
+
+
+def _augment_with_historical_failures(
+    spec: ToolSpec,
+    failures: list[dict[str, Any]],
+) -> ToolSpec:
+    """Append a ``## HISTORICAL FAILURES`` block to ``spec['description']``.
+
+    Returns a new ``ToolSpec`` (shallow copy) with the augmented
+    description; leaves the original alone so caller-side state
+    (test assertions, retries, …) isn't surprised by mutation.
+    Empty ``failures`` → returns ``spec`` unchanged.
+    """
+    if not failures:
+        return spec
+    block = _render_historical_failures_block(failures)
+    if not block:
+        return spec
+    augmented = dict(spec)
+    base = (augmented.get("description") or "").rstrip()
+    augmented["description"] = f"{base}\n\n{block}\n" if base else f"{block}\n"
+    return augmented  # type: ignore[return-value]
+
+
 def _generate_one(
     symbol: SymbolMeta,
     feedback: list[dict[str, Any]],
+    historical_failures: list[dict[str, Any]],
     adapter: LLMAdapter | None,
     *,
     dry_run: bool,
@@ -247,6 +306,7 @@ def _generate_one(
     else:
         prompt = render_prompt(symbol, feedback)
         spec = adapter.generate(prompt, schema=TOOL_SPEC_SCHEMA)
+    spec = _augment_with_historical_failures(spec, historical_failures)
     return render_module(symbol, spec, generated_by=_generated_by(adapter, dry_run))
 
 
@@ -254,8 +314,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="psyneulink-mcp-generate",
         description=(
-            "Regenerate the auto layer of psyneulink-mcp tools from "
-            "PsyNeuLink's public API."
+            "Regenerate the auto layer of psyneulink-mcp tools from PsyNeuLink's public API."
         ),
     )
     parser.add_argument(
@@ -306,8 +365,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def _run_rerender() -> int:
     written, failures = rerender_directory(GENERATED_DIR)
     print(
-        f"[generate_tools] re-templated {len(written)} module(s); "
-        f"{len(failures)} failure(s).",
+        f"[generate_tools] re-templated {len(written)} module(s); {len(failures)} failure(s).",
         file=sys.stderr,
     )
     for path, msg in failures:
@@ -365,17 +423,28 @@ def main(argv: list[str] | None = None) -> int:
 
     mode = "dry-run" if args.dry_run else f"adapter {type(adapter).__name__}"
     print(
-        f"[generate_tools] {len(selected)} of {len(symbols)} seed symbol(s) "
-        f"selected; mode={mode}",
+        f"[generate_tools] {len(selected)} of {len(symbols)} seed symbol(s) selected; mode={mode}",
         file=sys.stderr,
     )
+
+    selected_tool_names = sorted({tool_name_for(s) for s in selected})
+    historical_by_tool = feedback_loop.gather_historical_failures(selected_tool_names)
+    if historical_by_tool:
+        print(
+            f"[generate_tools] including HISTORICAL FAILURES blocks for "
+            f"{len(historical_by_tool)} tool(s) "
+            f"(closed pnl:* issues on {corpus.corpus_repo()})",
+            file=sys.stderr,
+        )
 
     successful_stems: list[str] = []
     skipped_stems: list[str] = []
     failures: list[tuple[str, str]] = []
 
     for symbol in selected:
-        tool_feedback = feedback_by_tool.get(tool_name_for(symbol), [])
+        tool_name = tool_name_for(symbol)
+        tool_feedback = feedback_by_tool.get(tool_name, [])
+        tool_history = historical_by_tool.get(tool_name, [])
         if _should_skip(
             symbol,
             GENERATED_DIR,
@@ -386,7 +455,13 @@ def main(argv: list[str] | None = None) -> int:
             skipped_stems.append(module_stem_for(symbol))
             continue
         try:
-            body = _generate_one(symbol, tool_feedback, adapter, dry_run=args.dry_run)
+            body = _generate_one(
+                symbol,
+                tool_feedback,
+                tool_history,
+                adapter,
+                dry_run=args.dry_run,
+            )
         except Exception as e:  # noqa: BLE001 — keep going past per-symbol bugs
             failures.append((symbol.qualname, repr(e)))
             print(

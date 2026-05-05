@@ -26,6 +26,7 @@ from psyneulink_mcp.generator.feedback_loop import (  # noqa: E402  (path setup)
     archive_pending,
     consumed_issue_numbers,
     gather_feedback,
+    gather_historical_failures,
     group_by_tool,
     read_pending,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "archive_pending",
     "consumed_issue_numbers",
     "gather_feedback",
+    "gather_historical_failures",
     "group_by_tool",
     "main",
     "read_pending",

@@ -39,6 +39,17 @@ SCHEMA_FILENAME = "_schema.yaml"
 FEEDBACK_LABEL = "feedback"
 CONSUMED_LABEL = "consumed"
 AUTO_LABEL = "auto"
+WONTFIX_LABEL = "wontfix"
+INVALID_LABEL = "invalid"
+
+# Each generated tool gets its own ``pnl:<tool_name>`` label so closed
+# issues filed against that tool can be re-discovered at regen time
+# (see ``fetch_historical_failures``). The auto-publisher also applies
+# the label to runtime captures, self-healing if the label doesn't yet
+# exist (see ``feedback_publisher._file``).
+PNL_SYMBOL_LABEL_PREFIX = "pnl:"
+PNL_SYMBOL_LABEL_COLOR = "5319e7"
+PNL_SYMBOL_LABEL_DESCRIPTION = "PsyNeuLink symbol that triggered a runtime tool failure"
 
 CACHE_TTL_SECONDS = 60 * 60  # 1 hour
 
@@ -101,12 +112,9 @@ def _run_gh(args: list[str], *, check: bool = True) -> subprocess.CompletedProce
         stderr = (result.stderr or "").strip()
         if "authentication" in stderr.lower() or "not logged in" in stderr.lower():
             raise CorpusUnavailable(
-                "`gh` is not authenticated. Run `gh auth login` and retry. "
-                f"Detail: {stderr}"
+                f"`gh` is not authenticated. Run `gh auth login` and retry. Detail: {stderr}"
             )
-        raise CorpusUnavailable(
-            f"`gh {' '.join(args)}` exited {result.returncode}: {stderr}"
-        )
+        raise CorpusUnavailable(f"`gh {' '.join(args)}` exited {result.returncode}: {stderr}")
     return result
 
 
@@ -133,9 +141,7 @@ def _list_brainlike_yaml_paths() -> list[str]:
     Excludes the schema file and any dotfiles.
     """
     repo, ref = corpus_repo(), corpus_ref()
-    result = _run_gh(
-        ["api", f"repos/{repo}/git/trees/{ref}?recursive=1"]
-    )
+    result = _run_gh(["api", f"repos/{repo}/git/trees/{ref}?recursive=1"])
     try:
         tree = json.loads(result.stdout)
     except json.JSONDecodeError as e:
@@ -379,9 +385,7 @@ def find_existing_feedback_issue(title: str) -> int | None:
     try:
         issues = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as e:
-        raise CorpusUnavailable(
-            f"Could not parse `gh issue list` output: {e}"
-        ) from e
+        raise CorpusUnavailable(f"Could not parse `gh issue list` output: {e}") from e
     for issue in issues:
         if issue.get("title") == title:
             number = issue.get("number")
@@ -420,6 +424,150 @@ def open_feedback_issue(
         args.extend(["--label", ",".join(use_labels)])
     result = _run_gh(args)
     return (result.stdout or "").strip()
+
+
+def pnl_symbol_label(tool_name: str) -> str:
+    """Return the ``pnl:<tool_name>`` label string for a given tool.
+
+    The label is what the publisher tags runtime captures with and what
+    :func:`fetch_historical_failures` searches by. Keep the mapping
+    deterministic and 1:1 with tool names so the regen pipeline can
+    join in either direction.
+    """
+    return f"{PNL_SYMBOL_LABEL_PREFIX}{tool_name}"
+
+
+def ensure_label_exists(
+    name: str,
+    *,
+    color: str = PNL_SYMBOL_LABEL_COLOR,
+    description: str = PNL_SYMBOL_LABEL_DESCRIPTION,
+) -> bool:
+    """Idempotently create ``name`` as a label on the corpus repo.
+
+    Returns ``True`` when the label exists at the end of the call (newly
+    created OR already-present). Returns ``False`` when ``gh label create``
+    fails for any other reason.
+
+    GitHub's ``gh label create`` exits non-zero with stderr containing
+    "already exists" when the label is present — that's our success
+    signal for the idempotent path. Any other non-zero exit is treated
+    as a real failure (raises :class:`CorpusUnavailable`).
+    """
+    repo = corpus_repo()
+    args = [
+        "label",
+        "create",
+        name,
+        "--repo",
+        repo,
+        "--color",
+        color,
+        "--description",
+        description,
+        "--force",  # keep the label's color/description in sync if it exists
+    ]
+    try:
+        _run_gh(args)
+    except CorpusUnavailable as e:
+        msg = str(e).lower()
+        if "already exists" in msg:
+            # Race / pre-existing label: success either way.
+            return True
+        # Bubble the real error up; callers (the publisher) catch it.
+        raise
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# historical-failure read path (generator-only)                               #
+# --------------------------------------------------------------------------- #
+#
+# Closed issues on the corpus tagged with ``pnl:<tool_name>`` are the
+# project's institutional memory of "ways this tool has gone wrong in the
+# past". The generator pulls them at regen time and embeds the most
+# recent N into the tool's description so the LLM sees a concrete
+# cautionary list every time it considers calling that tool. See
+# ``generator/feedback_loop.py:gather_historical_failures`` and
+# ``generator/orchestrator._augment_with_historical_failures``.
+
+
+def fetch_closed_issues_for_label(
+    label_name: str,
+    *,
+    limit: int = 30,
+) -> list[dict[str, Any]]:
+    """Closed issues on the corpus repo carrying ``label_name``.
+
+    Returns the raw `gh issue list` payload (with ``stateReason``,
+    ``labels``, etc.) so callers can apply their own filter rules.
+    Raises :class:`CorpusUnavailable` on any `gh` failure.
+
+    A non-existent label is NOT an error here: `gh` returns an empty
+    list, which we surface as ``[]``. That keeps the regen pipeline
+    quiet on first encounter with a tool that has no history.
+    """
+    repo = corpus_repo()
+    result = _run_gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--label",
+            label_name,
+            "--state",
+            "closed",
+            "--json",
+            "number,url,title,body,labels,stateReason,closedAt",
+            "--limit",
+            str(limit),
+        ]
+    )
+    try:
+        return json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as e:
+        raise CorpusUnavailable(f"Could not parse `gh issue list` output: {e}") from e
+
+
+def fetch_historical_failures(
+    tool_name: str,
+    *,
+    max_results: int = 5,
+) -> list[dict[str, Any]]:
+    """Closed ``pnl:<tool_name>`` issues filtered to actionable history.
+
+    Filter rules:
+
+    * ``stateReason == "not_planned"`` → drop. The maintainer
+      explicitly decided not to act; not a cautionary tale.
+    * Has label ``wontfix`` → drop. Same reasoning.
+    * Has label ``invalid`` → drop. Operator error, not a real
+      historical failure.
+
+    Stable ordering: sort by issue ``number`` descending so the most
+    recent-numbered issues come first; cap at ``max_results`` (default
+    5) to keep the rendered tool description bounded.
+
+    Returns an empty list when the corpus has no qualifying history
+    (or when the label doesn't exist yet). Raises
+    :class:`CorpusUnavailable` on any `gh` failure; the generator
+    catches that and degrades to "no historical failures section".
+    """
+    label = pnl_symbol_label(tool_name)
+    issues = fetch_closed_issues_for_label(label, limit=max(max_results * 4, 30))
+
+    keep: list[dict[str, Any]] = []
+    for issue in issues:
+        if issue.get("stateReason") == "not_planned":
+            continue
+        labels = {label.get("name") for label in issue.get("labels") or []}
+        if WONTFIX_LABEL in labels or INVALID_LABEL in labels:
+            continue
+        keep.append(issue)
+
+    keep.sort(key=lambda i: i.get("number") or 0, reverse=True)
+    return keep[:max_results]
 
 
 # --------------------------------------------------------------------------- #

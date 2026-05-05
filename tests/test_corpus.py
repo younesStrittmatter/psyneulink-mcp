@@ -112,9 +112,8 @@ def _make_brainlike_run(yaml_files: dict[str, str]):
         # Tree listing
         if len(gh_args) >= 3 and gh_args[1] == "api" and "git/trees" in gh_args[2]:
             tree = {
-                "tree": [
-                    {"type": "blob", "path": p} for p in yaml_files
-                ] + [
+                "tree": [{"type": "blob", "path": p} for p in yaml_files]
+                + [
                     {"type": "blob", "path": "README.md"},  # filtered out
                     {"type": "tree", "path": "community/brainlike"},  # filtered out
                 ]
@@ -132,9 +131,7 @@ def _make_brainlike_run(yaml_files: dict[str, str]):
     return side_effect
 
 
-def test_fetch_brainlike_views_parses_yaml_and_skips_schema(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_fetch_brainlike_views_parses_yaml_and_skips_schema(monkeypatch, fake_corpus_env) -> None:
     files = {
         "community/brainlike/_schema.yaml": "$id: schema",
         "community/brainlike/transfer.yaml": (
@@ -146,9 +143,7 @@ def test_fetch_brainlike_views_parses_yaml_and_skips_schema(
         "community/brainlike/.hidden.yaml": "id: hidden",
         "community/brainlike/notes.txt": "ignored",
     }
-    monkeypatch.setattr(
-        corpus.subprocess, "run", _make_brainlike_run(files)
-    )
+    monkeypatch.setattr(corpus.subprocess, "run", _make_brainlike_run(files))
 
     views = corpus.fetch_brainlike_views()
 
@@ -159,9 +154,7 @@ def test_fetch_brainlike_views_parses_yaml_and_skips_schema(
         assert v["__source_path__"].startswith("community/brainlike/")
 
 
-def test_fetch_brainlike_views_caches_result(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_fetch_brainlike_views_caches_result(monkeypatch, fake_corpus_env) -> None:
     files = {
         "community/brainlike/transfer.yaml": "id: transfer\ntitle: T\n",
     }
@@ -182,9 +175,7 @@ def test_fetch_brainlike_views_caches_result(
     assert first == second
 
 
-def test_fetch_brainlike_views_force_bypasses_cache(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_fetch_brainlike_views_force_bypasses_cache(monkeypatch, fake_corpus_env) -> None:
     files = {"community/brainlike/transfer.yaml": "id: transfer\n"}
     calls: list[list[str]] = []
     real_side_effect = _make_brainlike_run(files)
@@ -200,9 +191,7 @@ def test_fetch_brainlike_views_force_bypasses_cache(
     assert len(calls) > n_first
 
 
-def test_fetch_brainlike_views_skips_malformed_yaml(
-    monkeypatch, fake_corpus_env, capsys
-) -> None:
+def test_fetch_brainlike_views_skips_malformed_yaml(monkeypatch, fake_corpus_env, capsys) -> None:
     files = {
         "community/brainlike/good.yaml": "id: good\ntitle: ok\n",
         "community/brainlike/bad.yaml": "id: [unbalanced",
@@ -242,9 +231,7 @@ def _issue(
     }
 
 
-def test_fetch_pending_feedback_issues_parses_form_body(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_fetch_pending_feedback_issues_parses_form_body(monkeypatch, fake_corpus_env) -> None:
     body = (
         "### Tool name\n\n"
         "psyneulink_create_mechanism\n\n"
@@ -292,9 +279,7 @@ def test_fetch_pending_feedback_issues_falls_back_when_unparseable(
     assert envelopes[0]["payload"]["description"] == "just a free-form complaint"
 
 
-def test_fetch_pending_feedback_issues_filters_consumed(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_fetch_pending_feedback_issues_filters_consumed(monkeypatch, fake_corpus_env) -> None:
     issues = [
         _issue(number=1, title="a", body="x", labels=["feedback"]),
         _issue(number=2, title="b", body="x", labels=["feedback", "consumed"]),
@@ -362,9 +347,7 @@ def test_find_existing_feedback_issue_ignores_partial_title_matches(
     assert corpus.find_existing_feedback_issue(title) is None
 
 
-def test_find_existing_feedback_issue_raises_on_gh_failure(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_find_existing_feedback_issue_raises_on_gh_failure(monkeypatch, fake_corpus_env) -> None:
     monkeypatch.setattr(
         corpus.subprocess,
         "run",
@@ -374,16 +357,12 @@ def test_find_existing_feedback_issue_raises_on_gh_failure(
         corpus.find_existing_feedback_issue("anything")
 
 
-def test_open_feedback_issue_invokes_gh_with_default_labels(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_open_feedback_issue_invokes_gh_with_default_labels(monkeypatch, fake_corpus_env) -> None:
     captured: dict[str, Any] = {}
 
     def fake_run(args, **_kw):
         captured["args"] = list(args)
-        return _completed(
-            stdout="https://github.com/test-owner/test-corpus/issues/99\n"
-        )
+        return _completed(stdout="https://github.com/test-owner/test-corpus/issues/99\n")
 
     monkeypatch.setattr(corpus.subprocess, "run", fake_run)
 
@@ -398,9 +377,7 @@ def test_open_feedback_issue_invokes_gh_with_default_labels(
     assert "feedback,auto" in captured["args"]
 
 
-def test_open_feedback_issue_honours_explicit_label_list(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_open_feedback_issue_honours_explicit_label_list(monkeypatch, fake_corpus_env) -> None:
     captured: dict[str, Any] = {}
 
     def fake_run(args, **_kw):
@@ -412,9 +389,7 @@ def test_open_feedback_issue_honours_explicit_label_list(
     assert "alpha,beta" in captured["args"]
 
 
-def test_open_feedback_issue_raises_on_gh_failure(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_open_feedback_issue_raises_on_gh_failure(monkeypatch, fake_corpus_env) -> None:
     monkeypatch.setattr(
         corpus.subprocess,
         "run",
@@ -429,9 +404,7 @@ def test_open_feedback_issue_raises_on_gh_failure(
 # --------------------------------------------------------------------------- #
 
 
-def test_mark_issues_consumed_comments_and_labels_each(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_mark_issues_consumed_comments_and_labels_each(monkeypatch, fake_corpus_env) -> None:
     calls: list[list[str]] = []
 
     def fake_run(args, **_kw):
@@ -473,9 +446,7 @@ def test_mark_issues_consumed_continues_on_per_issue_failure(
 # --------------------------------------------------------------------------- #
 
 
-def test_get_my_brainlike_view_returns_empty_when_no_profile(
-    monkeypatch, tmp_path
-) -> None:
+def test_get_my_brainlike_view_returns_empty_when_no_profile(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv(
         curated_brainlike.ENV_PERSONAL_PROFILE,
         str(tmp_path / "missing.yaml"),
@@ -503,9 +474,7 @@ def test_get_my_brainlike_view_reads_yaml_profile(monkeypatch, tmp_path) -> None
     assert out["source"] == str(profile)
 
 
-def test_get_my_brainlike_view_rejects_non_mapping_yaml(
-    monkeypatch, tmp_path
-) -> None:
+def test_get_my_brainlike_view_rejects_non_mapping_yaml(monkeypatch, tmp_path) -> None:
     profile = tmp_path / "me.yaml"
     profile.write_text("- just\n- a list\n", encoding="utf-8")
     monkeypatch.setenv(curated_brainlike.ENV_PERSONAL_PROFILE, str(profile))
@@ -518,9 +487,7 @@ def test_get_my_brainlike_view_rejects_non_mapping_yaml(
     assert "must be a YAML mapping" in out["error"]
 
 
-def test_get_community_brainlike_views_degrades_gracefully(
-    monkeypatch, fake_corpus_env
-) -> None:
+def test_get_community_brainlike_views_degrades_gracefully(monkeypatch, fake_corpus_env) -> None:
     def boom(*_a, **_kw):
         raise corpus.CorpusUnavailable("no network in this test")
 
@@ -552,3 +519,161 @@ def test_get_community_brainlike_views_returns_views_on_success(
     assert out["count"] == 1
     assert out["views"][0]["id"] == "x"
     assert "error" not in out
+
+
+# --------------------------------------------------------------------------- #
+# pnl:<symbol> labels (Phase 1 t5)                                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_pnl_symbol_label_is_deterministic_and_prefixed() -> None:
+    assert corpus.pnl_symbol_label("create_lca_mechanism") == ("pnl:create_lca_mechanism")
+    assert corpus.pnl_symbol_label("add_node").startswith(corpus.PNL_SYMBOL_LABEL_PREFIX)
+
+
+def test_ensure_label_exists_invokes_gh_label_create_with_force(
+    monkeypatch, fake_corpus_env
+) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(args, **_kw):
+        captured["args"] = list(args)
+        return _completed(stdout="created")
+
+    monkeypatch.setattr(corpus.subprocess, "run", fake_run)
+    assert corpus.ensure_label_exists("pnl:foo") is True
+
+    args = captured["args"]
+    assert "label" in args and "create" in args
+    # The label name + idempotency `--force` flag must both be present so
+    # a re-run on an existing label updates color/description rather than
+    # exiting non-zero on collision.
+    assert "pnl:foo" in args
+    assert "--force" in args
+    # Color + description default to the publisher's "this is a runtime
+    # capture" cosmetics so all auto-minted labels look consistent.
+    assert corpus.PNL_SYMBOL_LABEL_COLOR in args
+
+
+def test_ensure_label_exists_treats_already_exists_as_success(monkeypatch, fake_corpus_env) -> None:
+    """`gh label create` without --force returns rc=1 with 'already exists'.
+
+    Even though we pass --force in production, an older `gh` build might
+    emit the same shape under unrelated conditions; the helper must still
+    return True when stderr says the label is already present.
+    """
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stderr="error: label 'pnl:foo' already exists", returncode=1),
+    )
+    assert corpus.ensure_label_exists("pnl:foo") is True
+
+
+def test_ensure_label_exists_raises_on_real_failure(monkeypatch, fake_corpus_env) -> None:
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stderr="HTTP 500: backend boom", returncode=1),
+    )
+    with pytest.raises(corpus.CorpusUnavailable):
+        corpus.ensure_label_exists("pnl:foo")
+
+
+# --------------------------------------------------------------------------- #
+# fetch_historical_failures (Phase 1 t5 part B)                               #
+# --------------------------------------------------------------------------- #
+
+
+def _closed_issue(
+    *,
+    number: int,
+    title: str,
+    body: str = "",
+    labels: list[str] | None = None,
+    state_reason: str = "completed",
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "url": f"https://example/issues/{number}",
+        "title": title,
+        "body": body,
+        "labels": [{"name": n} for n in (labels or [])],
+        "stateReason": state_reason,
+        "closedAt": "2026-05-01T00:00:00Z",
+    }
+
+
+def test_fetch_historical_failures_filters_wontfix_invalid_and_not_planned(
+    monkeypatch, fake_corpus_env
+) -> None:
+    issues = [
+        _closed_issue(number=10, title="legit fixed", labels=["pnl:t", "feedback"]),
+        _closed_issue(
+            number=11,
+            title="design decision",
+            labels=["pnl:t", "wontfix"],
+        ),
+        _closed_issue(number=12, title="operator error", labels=["pnl:t", "invalid"]),
+        _closed_issue(
+            number=13,
+            title="explicitly not planned",
+            labels=["pnl:t"],
+            state_reason="not_planned",
+        ),
+        _closed_issue(number=14, title="another legit", labels=["pnl:t"]),
+    ]
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stdout=json.dumps(issues)),
+    )
+
+    out = corpus.fetch_historical_failures("t")
+    numbers = [i["number"] for i in out]
+    # Keep #10 and #14, drop #11 (wontfix), #12 (invalid), #13 (not_planned).
+    # Sort by number desc — most recent issues first.
+    assert numbers == [14, 10]
+
+
+def test_fetch_historical_failures_respects_max_results(monkeypatch, fake_corpus_env) -> None:
+    issues = [_closed_issue(number=n, title=f"t{n}", labels=["pnl:t"]) for n in range(50, 30, -1)]
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stdout=json.dumps(issues)),
+    )
+
+    out = corpus.fetch_historical_failures("t", max_results=3)
+    assert [i["number"] for i in out] == [50, 49, 48]
+
+
+def test_fetch_historical_failures_returns_empty_on_empty_label(
+    monkeypatch, fake_corpus_env
+) -> None:
+    """A label that has never been used returns an empty list, not an error."""
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stdout="[]"),
+    )
+    assert corpus.fetch_historical_failures("never_used") == []
+
+
+def test_fetch_historical_failures_searches_by_pnl_label(monkeypatch, fake_corpus_env) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(args, **_kw):
+        captured["args"] = list(args)
+        return _completed(stdout="[]")
+
+    monkeypatch.setattr(corpus.subprocess, "run", fake_run)
+    corpus.fetch_historical_failures("create_lca_mechanism")
+
+    args = captured["args"]
+    assert "issue" in args and "list" in args
+    assert "--state" in args and "closed" in args
+    # Must scope by the per-symbol label, not the generic feedback one.
+    assert "pnl:create_lca_mechanism" in args
+    # `stateReason` is what we use to drop not_planned closures.
+    assert any("stateReason" in a for a in args)
