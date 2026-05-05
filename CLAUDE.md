@@ -79,13 +79,52 @@ the design is wrong — fix the design.
 
 ## The generator pattern
 
-1. Introspect the `psyneulink` module at build time
-2. For each public class/function, send source + docstring to LLM (make an adapter for this that uses API token or Claude Max plan)
-3. LLM writes an LLM-friendly tool description + JSON schema
-4. Output is committed Python files in `src/psyneulink_mcp/tools/generated/`
-5. Re-run when PNL updates; review the diff
+1. Introspect the `psyneulink` module at build time, driven by
+   `generator/seeds.txt` (four directives: `import-walk:`, `symbol:`,
+   `package:`, `method:`).
+2. For each resolved symbol, send source + docstring to an LLM adapter.
+   The default adapter shells out to the local `claude` CLI in
+   `--print --json-schema` mode, which uses the user's Claude Max
+   subscription via the CLI's local OAuth — **no API key needed**.
+   The Anthropic API adapter (opt-in via
+   `$PSYNEULINK_MCP_LLM_ADAPTER=anthropic_api`) is the fallback for
+   environments without the CLI.
+3. LLM writes an LLM-friendly tool description + JSON schema.
+4. Output is committed Python files in `src/psyneulink_mcp/tools/generated/`.
+5. Re-run when PNL updates; review the diff. Source-hash skip means
+   only changed symbols re-hit the LLM.
 
-This is build-time codegen, not runtime. Server itself has no LLM dependency.
+This is build-time codegen, not runtime. Server itself has no LLM
+dependency.
+
+### Regenerating the auto layer
+
+```bash
+uv run psyneulink-mcp-generate                # full regen, real LLM
+uv run psyneulink-mcp-generate --dry-run      # placeholder ToolSpecs (CI sanity)
+uv run psyneulink-mcp-generate --only Composition,TransferMechanism
+uv run psyneulink-mcp-generate --rerender     # re-template from on-disk metadata,
+                                              # no LLM call
+```
+
+Override the model with `$PSYNEULINK_MCP_CLAUDE_MODEL` (default:
+`sonnet`); the per-call timeout with `$PSYNEULINK_MCP_CLAUDE_TIMEOUT_S`
+(default: 300s, sized for `Composition`).
+
+### Source install of PsyNeuLink (NOT PyPI)
+
+`pyproject.toml` pins `psyneulink` to the upstream `devel` branch via
+`[tool.uv.sources]`:
+
+```toml
+psyneulink = { git = "https://github.com/PrincetonUniversity/PsyNeuLink", branch = "devel" }
+```
+
+This is intentional and symmetric with how `experiment-mcp` pulls
+`sweetpea` + `sweetbean` from upstream branches — the generator must
+codegen against the live API surface, and PyPI lags `devel` by months
+in practice. The first `uv lock` after a fresh clone takes ~1-2 min
+while uv clones PNL; subsequent ones are instant.
 
 ## Tool surface
 
@@ -150,4 +189,6 @@ The corpus repo is overridable via `PSYNEULINK_MCP_CORPUS_REPO`
 1. `uv run psyneulink-mcp` to start the server
 2. `npx @modelcontextprotocol/inspector uv run psyneulink-mcp` for the inspector
 3. `uv run pytest` for tests
-4. `uv run python scripts/generate_tools.py` to regenerate the auto layer
+4. `uv run psyneulink-mcp-generate` (or `uv run python
+   scripts/generate_tools.py`) to regenerate the auto layer. Default
+   adapter is `claude_cli`; see "Regenerating the auto layer" above.

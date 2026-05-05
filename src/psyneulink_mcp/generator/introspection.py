@@ -256,7 +256,16 @@ def _qualnames_from_import_walk(seed_module_qualname: str) -> set[str]:
 
 
 def _qualnames_from_package(package_qualname: str) -> set[str]:
-    """Every public class/function on the live module object."""
+    """Every public class/function on the live module object.
+
+    Filters silently:
+
+    * Names starting with ``_`` (private-by-convention).
+    * Exception / Warning subclasses — these are raised by the library,
+      not constructed by an agent. Surfacing them as MCP tools wastes
+      LLM regen budget and produces nonsensical "create FooError"
+      descriptions.
+    """
     try:
         module = importlib.import_module(package_qualname)
     except ImportError:
@@ -269,7 +278,11 @@ def _qualnames_from_package(package_qualname: str) -> set[str]:
             obj = getattr(module, name)
         except AttributeError:
             continue
-        if inspect.isclass(obj) or inspect.isfunction(obj):
+        if inspect.isclass(obj):
+            if issubclass(obj, BaseException):
+                continue
+            qualnames.add(f"{package_qualname}.{name}")
+        elif inspect.isfunction(obj):
             qualnames.add(f"{package_qualname}.{name}")
     return qualnames
 
@@ -299,6 +312,11 @@ def _resolve_qualname(qualname: str) -> SymbolMeta | None:
         return None
 
     if inspect.isclass(obj):
+        # Exceptions / Warnings are raised, not constructed by the agent.
+        # Silently skip so wide directives like ``package: psyneulink``
+        # don't burn LLM regen budget on `*Error` classes.
+        if issubclass(obj, BaseException):
+            return None
         kind: Literal["class", "function"] = "class"
     elif inspect.isfunction(obj) or inspect.isbuiltin(obj):
         kind = "function"

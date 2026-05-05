@@ -15,17 +15,85 @@
 #
 # Lines starting with `#` and blank lines are ignored.
 
-# Default surface: the canonical "this is how PNL is meant to be used"
-# example library that ships with PsyNeuLink. Edit to extend.
+# --------------------------------------------------------------------------- #
+# Full top-level PNL surface                                                  #
+# --------------------------------------------------------------------------- #
+# `package: psyneulink` walks every public class + function exposed at the
+# top level of `psyneulink` (filtered to classes/functions by the
+# introspection layer). PsyNeuLink intentionally re-exports its core types
+# (Composition, every Mechanism subclass, every Function subclass,
+# Projection types, Ports, Schedulers, …) at the top level so most of
+# what an agent realistically constructs is reachable this way. The
+# generator skips C-extensions and dynamically-built objects that
+# `inspect.getsource` can't handle, so this remains safe to leave wide.
+package: psyneulink
+
+# --------------------------------------------------------------------------- #
+# Submodule packages — catch symbols that are NOT re-exported at top level    #
+# --------------------------------------------------------------------------- #
+# These cover the case where a useful constructor lives only in a deep
+# submodule (e.g. specialised mechanism / projection / function variants)
+# and isn't re-exported on `pnl.X`. Same filtering as `package: psyneulink`.
+package: psyneulink.core.components.mechanisms.processing.transfermechanism
+package: psyneulink.core.components.mechanisms.processing.integratormechanism
+package: psyneulink.core.components.mechanisms.processing.objectivemechanism
+package: psyneulink.core.components.mechanisms.processing.processingmechanism
+package: psyneulink.core.components.mechanisms.modulatory.control.controlmechanism
+package: psyneulink.core.components.mechanisms.modulatory.gating.gatingmechanism
+package: psyneulink.core.components.mechanisms.modulatory.learning.learningmechanism
+package: psyneulink.core.components.projections.pathway.mappingprojection
+package: psyneulink.core.components.projections.modulatory.controlprojection
+package: psyneulink.core.components.projections.modulatory.gatingprojection
+package: psyneulink.core.components.projections.modulatory.learningprojection
+package: psyneulink.core.components.functions.nonstateful.transferfunctions
+package: psyneulink.core.components.functions.nonstateful.combinationfunctions
+package: psyneulink.core.components.functions.nonstateful.distributionfunctions
+package: psyneulink.core.components.functions.nonstateful.objectivefunctions
+package: psyneulink.core.components.functions.nonstateful.optimizationfunctions
+package: psyneulink.core.components.functions.nonstateful.selectionfunctions
+package: psyneulink.core.components.functions.nonstateful.learningfunctions
+package: psyneulink.core.components.functions.stateful.integratorfunctions
+package: psyneulink.core.components.functions.stateful.memoryfunctions
+package: psyneulink.library.components.mechanisms.processing.integrator.episodicmemorymechanism
+package: psyneulink.library.components.mechanisms.processing.transfer.lcamechanism
+package: psyneulink.library.components.mechanisms.processing.transfer.kohonenmechanism
+package: psyneulink.library.components.mechanisms.processing.transfer.kwtamechanism
+package: psyneulink.library.components.mechanisms.processing.transfer.recurrenttransfermechanism
+package: psyneulink.library.components.mechanisms.modulatory.control.agt.agtcontrolmechanism
+package: psyneulink.library.components.mechanisms.modulatory.control.agt.lccontrolmechanism
+package: psyneulink.library.components.mechanisms.modulatory.learning.autoassociativelearningmechanism
+
+# --------------------------------------------------------------------------- #
+# Bundled example walk — naming-hint signal for the LLM                       #
+# --------------------------------------------------------------------------- #
+# The canonical "this is how PNL is meant to be used" example library that
+# ships with PsyNeuLink. Names that already showed up in
+# `import-walk: psyneulink.library.models` are deduped by qualname.
 import-walk: psyneulink.library.models
 
-# Composition-mutating methods. These were curated tools until they
-# acquired enough captured-feedback signal (matrix=IDENTITY_MATRIX,
-# CompositionError on missing nodes, DuplicateProjectionError on retry)
-# to deserve the regen loop. The generator's method support resolves
-# `composition` from the first kwarg; per-method special-cases (defensive
-# sender/receiver pre-add, duplicate-as-success swallow) live in
-# psyneulink_mcp/method_helpers.py and are pinned across regens.
+# --------------------------------------------------------------------------- #
+# Composition-mutating methods                                                #
+# --------------------------------------------------------------------------- #
+# These need the method directive (not constructors): the generated tool
+# resolves a `composition` handle string → live object before dispatch.
+# Per-method special cases (defensive sender/receiver pre-add,
+# DuplicateProjectionError swallow, run-time keyword translation, etc.)
+# live in psyneulink_mcp/method_helpers.py and are pinned across regens.
 method: psyneulink.Composition.add_node
+method: psyneulink.Composition.add_nodes
 method: psyneulink.Composition.add_projection
+method: psyneulink.Composition.add_projections
 method: psyneulink.Composition.add_linear_processing_pathway
+method: psyneulink.Composition.add_pathway
+method: psyneulink.Composition.add_pathways
+method: psyneulink.Composition.add_backpropagation_learning_pathway
+method: psyneulink.Composition.add_reinforcement_learning_pathway
+method: psyneulink.Composition.add_td_learning_pathway
+method: psyneulink.Composition.add_controller
+method: psyneulink.Composition.remove_node
+method: psyneulink.Composition.remove_nodes
+method: psyneulink.Composition.remove_projection
+method: psyneulink.Composition.run
+method: psyneulink.Composition.execute
+method: psyneulink.Composition.learn
+method: psyneulink.Composition.show_graph

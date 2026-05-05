@@ -115,9 +115,17 @@ def test_repo_seeds_file_parses() -> None:
 
 
 def test_iter_seed_module_files_lists_all_seven_pnl_models() -> None:
+    """The canonical seven library.models files must always be present.
+
+    PNL's `devel` branch grows new bundled models over time (e.g.
+    Giallanza2024 landed after this test was first written), so we
+    assert a SUPERSET rather than equality — new additions don't
+    break the assertion, but a regression that drops one of the
+    canonical seven still does.
+    """
     files = iter_seed_module_files(DEFAULT_SEED_DIRECTIVE_TARGET)
-    names = sorted(p.name for p in files)
-    assert names == [
+    names = {p.name for p in files}
+    canonical = {
         "Botvinick_conflict_monitoring_model.py",
         "Cohen_Huston1994.py",
         "Cohen_Huston1994_horse_race.py",
@@ -125,7 +133,12 @@ def test_iter_seed_module_files_lists_all_seven_pnl_models() -> None:
         "Kalanthroff_PCTC_2018.py",
         "MontagueDayanSejnowski96.py",
         "Nieuwenhuis2005Model.py",
-    ]
+    }
+    missing = canonical - names
+    assert not missing, (
+        f"library.models is missing canonical model file(s) "
+        f"from PNL devel: {sorted(missing)}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -235,6 +248,51 @@ def test_discover_from_directives_skips_unresolvable_symbol(
     symbols = discover_from_directives(
         [SeedDirective("symbol", "fake_pnl_d.DoesNotExist")]
     )
+    assert symbols == []
+
+
+# Module-level Exception fixture — declared at top level so
+# `inspect.getsource` can resolve it (mirroring the existing `Fx*`
+# fixtures above; see `_retag` for why __module__ is rebound).
+class FxBoomError(Exception):
+    """Synthetic Exception subclass used to assert it gets filtered out."""
+
+
+def test_discover_from_directives_skips_exception_subclasses_via_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Wide ``package:`` directives must NOT pull in BaseException subclasses.
+
+    Exception classes are raised by the wrapped library, not constructed
+    by an agent. Surfacing them as MCP tools wastes regen budget and
+    produces "create FooError" descriptions that confuse LLM consumers.
+    The filter sits in introspection so all callers benefit.
+    """
+    pkg = _make_fake_package(monkeypatch, "fake_pnl_e")
+    pkg.Real = _retag(FxAlpha, "fake_pnl_e")
+    pkg.Boom = _retag(FxBoomError, "fake_pnl_e")
+
+    qualnames = [
+        s.qualname
+        for s in discover_from_directives([SeedDirective("package", "fake_pnl_e")])
+    ]
+    assert "fake_pnl_e.Real" in qualnames
+    assert "fake_pnl_e.Boom" not in qualnames
+
+
+def test_discover_from_directives_skips_exception_subclasses_via_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same filter applies to direct ``symbol:`` directives.
+
+    A user who writes ``symbol: fake.SomeError`` in seeds.txt almost
+    certainly didn't mean to: the resolver silently drops it so the
+    seed list stays diff-friendly without a noisy warning every regen.
+    """
+    pkg = _make_fake_package(monkeypatch, "fake_pnl_f")
+    pkg.Boom = _retag(FxBoomError, "fake_pnl_f")
+
+    symbols = discover_from_directives([SeedDirective("symbol", "fake_pnl_f.Boom")])
     assert symbols == []
 
 

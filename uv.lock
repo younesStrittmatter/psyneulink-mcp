@@ -2281,7 +2281,7 @@ wheels = [
 
 [[package]]
 name = "modeci-mdf"
-version = "0.4.14"
+version = "0.4.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs", marker = "platform_machine != 's390x'" },
@@ -2299,9 +2299,9 @@ dependencies = [
     { name = "onnxruntime", version = "1.25.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11' and platform_machine != 's390x'" },
     { name = "skl2onnx", marker = "platform_machine != 's390x'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/75/a2de2f4f520f7056e62d98f1bbfe5bf90d6370aebabd46ac7bfceaa8c44b/modeci_mdf-0.4.14.tar.gz", hash = "sha256:3b7e947320f707f8451b0ad1f08e51c5ab234913316e94abad21aa359a487cb1", size = 99758, upload-time = "2026-02-11T17:53:39.571Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/1f/daef618f0ba1eacab22b7fe70183ec8c25f534c55cca64c62c5a4d48e9dd/modeci_mdf-0.4.13.tar.gz", hash = "sha256:0d758442d3a5562222d1d12544184e058a21621de34d9e7901cd59df8e883826", size = 99309, upload-time = "2025-09-19T17:12:37.656Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/9d/3e9f44a360670bfdba52e89c3ea6341d7736233ce26212773a33d5e17211/modeci_mdf-0.4.14-py3-none-any.whl", hash = "sha256:20c2ac824bd7d746a13b4fd14f92f2449b0950d6673a72b2280ad7c784290707", size = 95581, upload-time = "2026-02-11T17:53:38.409Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/7f/5b05107b7ee1b0022943cae6b0734253d883c2b3f874d1e51c38acdd282e/modeci_mdf-0.4.13-py3-none-any.whl", hash = "sha256:e1da26d1dcbf70fb48a8c9562b19c5bf854163da60d5d268b4d589d2c8d6ccd7", size = 95101, upload-time = "2025-09-19T17:12:36.374Z" },
 ]
 
 [[package]]
@@ -3204,8 +3204,8 @@ wheels = [
 
 [[package]]
 name = "psyneulink"
-version = "0.18.0.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.18.0.0+311.gad421c6d7"
+source = { git = "https://github.com/PrincetonUniversity/PsyNeuLink?branch=devel#ad421c6d70edc7b5266ad6f8aea0bf08369045e7" }
 dependencies = [
     { name = "beartype" },
     { name = "dill" },
@@ -3234,10 +3234,6 @@ dependencies = [
     { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "toposort" },
     { name = "torch", marker = "(implementation_name == 'cpython' and platform_machine == 'AMD64' and platform_python_implementation == 'CPython') or (implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython') or (implementation_name == 'cpython' and platform_machine == 'arm64' and platform_python_implementation == 'CPython') or (implementation_name == 'cpython' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython')" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/9e/78f1fe48aaac534fb1ba0bd487bf748a6306b3937346e4fae14ffdd5a51f/psyneulink-0.18.0.0.tar.gz", hash = "sha256:a76ee1c49f037bff1507c360b8bc469d306493d9956f37930a3542d9023b8786", size = 2399386, upload-time = "2025-10-02T03:13:23.24Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/bb/b199a0a01c4a6894ab26b25a76773a3ad6ed027cf43287f8ef784007910c/psyneulink-0.18.0.0-py3-none-any.whl", hash = "sha256:085f42e4b78e0ba4d56933bd4b020b3dad5ea3df0a2561218d4e5d9c4deb3d94", size = 1899981, upload-time = "2025-10-02T03:13:21.292Z" },
 ]
 
 [[package]]
@@ -3270,7 +3266,7 @@ requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic-api'", specifier = ">=0.40" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "pandas", marker = "extra == 'psyche'", specifier = ">=2" },
-    { name = "psyneulink" },
+    { name = "psyneulink", git = "https://github.com/PrincetonUniversity/PsyNeuLink?branch=devel" },
     { name = "psyneulink-psyche", marker = "extra == 'psyche'", editable = "../psyneulink-psyche" },
     { name = "pyyaml", specifier = ">=6" },
 ]

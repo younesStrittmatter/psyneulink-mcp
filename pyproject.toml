@@ -27,6 +27,11 @@ psyche = [
 # under the parent `psyneulink-ai/` workspace folder. Editable so changes
 # in the sibling are picked up without a re-sync.
 psyneulink-psyche = { path = "../psyneulink-psyche", editable = true }
+# Pull PsyNeuLink from the upstream `devel` branch rather than PyPI.
+# We codegen tools off the live source; PyPI lags devel by several
+# weeks/months, so any new mechanism / projection landed on devel only
+# becomes available to the agent here.
+psyneulink = { git = "https://github.com/PrincetonUniversity/PsyNeuLink", branch = "devel" }
 
 [project.scripts]
 psyneulink-mcp           = "psyneulink_mcp.server:main"
