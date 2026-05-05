@@ -34,7 +34,10 @@ ENV_CLAUDE_TIMEOUT_S = "PSYNEULINK_MCP_CLAUDE_TIMEOUT_S"
 
 DEFAULT_CMD = "claude"
 DEFAULT_MODEL = "sonnet"
-DEFAULT_TIMEOUT_S = 120
+# 300s comfortably accommodates the largest PNL source files
+# (psyneulink.Composition is ~10k LOC and reliably needs >2 min on Sonnet).
+# Override per-run via $PSYNEULINK_MCP_CLAUDE_TIMEOUT_S.
+DEFAULT_TIMEOUT_S = 300
 
 
 class ClaudeCLIAdapter:
