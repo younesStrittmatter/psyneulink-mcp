@@ -32,6 +32,40 @@ HANDLE_PATTERN = re.compile(r"^h_[0-9a-f]{12}$")
 
 _HANDLES: dict[str, Any] = {}
 
+# ---- Composition revision counter ----------------------------------------- #
+#
+# The UI's graph pane needs a cheap way to ask "did this composition change
+# since I last rendered it?". Re-rendering a graph means shelling out to
+# graphviz, which is way more expensive than checking an int. So we keep a
+# per-handle integer counter that the curated composition-mutating tools
+# (``add_node``, ``add_linear_pathway``, ``add_projection``) bump after the
+# underlying mutation succeeds. Running a composition is *not* a mutation in
+# the topology sense — ``run_composition`` does not bump.
+#
+# The counter is process-scoped, like ``_HANDLES`` and the journal.
+
+_COMPOSITION_REVISION: dict[str, int] = {}
+
+
+def get_revision(handle: str) -> int:
+    """Current revision of a composition handle (0 if never bumped)."""
+    return _COMPOSITION_REVISION.get(handle, 0)
+
+
+def bump_revision(handle: str) -> int:
+    """Increment the revision counter for ``handle`` and return the new value.
+
+    Used by composition-mutating curated tools so that the UI's graph pane
+    can cheaply detect "this composition changed, re-render". No-op (returns
+    0) if the handle isn't currently registered — prevents stray bumps from
+    leaking into the dict.
+    """
+    if handle not in _HANDLES:
+        return 0
+    _COMPOSITION_REVISION[handle] = _COMPOSITION_REVISION.get(handle, 0) + 1
+    return _COMPOSITION_REVISION[handle]
+
+
 # ---- Session journal ------------------------------------------------------- #
 #
 # Every generated tool's ``_impl`` and every composition-mutating curated tool
@@ -196,11 +230,13 @@ def clear_journal() -> int:
 def clear_handles() -> int:
     """Drop everything; primarily for tests. Returns count of handles cleared.
 
-    Also clears the session journal as a side-effect — callers that need to
-    distinguish the two counts can call :func:`clear_journal` first, or
-    inspect ``len(journal_snapshot())`` before calling.
+    Also clears the session journal and the composition-revision counter as
+    side-effects — callers that need to distinguish the counts can call
+    :func:`clear_journal` first, or inspect ``len(journal_snapshot())``
+    before calling.
     """
     n = len(_HANDLES)
     _HANDLES.clear()
+    _COMPOSITION_REVISION.clear()
     clear_journal()
     return n

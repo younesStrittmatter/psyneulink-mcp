@@ -80,6 +80,7 @@ def register(mcp: Any) -> None:
         comp = handles.resolve_handle(composition)
         n = handles.resolve_handle(node)
         comp.add_node(n)
+        handles.bump_revision(composition)
         return {
             "composition": composition,
             "added": node,
@@ -117,6 +118,7 @@ def register(mcp: Any) -> None:
         comp = handles.resolve_handle(composition)
         objs = [handles.resolve_handle(h) for h in nodes]
         comp.add_linear_processing_pathway(objs)
+        handles.bump_revision(composition)
         return {
             "composition": composition,
             "pathway": list(nodes),
@@ -172,6 +174,7 @@ def register(mcp: Any) -> None:
             kwargs["matrix"] = matrix
         proj = pnl.MappingProjection(**kwargs)
         comp.add_projection(proj)
+        handles.bump_revision(composition)
         return {
             "composition": composition,
             "from": sender,
