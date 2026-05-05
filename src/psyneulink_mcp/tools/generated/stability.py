@@ -15,54 +15,53 @@ __pnl_qualname__ = 'psyneulink.Stability'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_stability'
-TOOL_DESCRIPTION = 'Call this tool to instantiate a Stability objective function that measures how stable a neural activation pattern is under recurrent self-connections. Use it when building a RecurrentTransferMechanism or ObjectiveMechanism that needs to quantify how much a state vector changes after passing through a weight matrix — e.g., to monitor convergence or implement energy-based stopping criteria. Returns a Stability Function object whose `.function(variable)` call yields a scalar stability score.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "1D array defining the shape and default value of the activation vector for which stability is computed. If omitted, use input_shapes instead.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Length of the activation vector. Alternative to default_variable; zeros are used as values. Raises an error if both are specified and input_shapes != len(default_variable).",\n      "type": "integer"\n    },\n    "matrix": {\n      "description": "Recurrent weight matrix (2D list/array) or a PsyNeuLink matrix keyword string (e.g. \'HOLLOW_MATRIX\', \'IDENTITY_MATRIX\'). Must be square with side length equal to len(variable). Internally convolved with HOLLOW_MATRIX to zero out self-connections. Defaults to \'HOLLOW_MATRIX\'.",\n      "type": [\n        "array",\n        "string"\n      ]\n    },\n    "metric": {\n      "description": "Distance metric used to compare the original variable with its transformed version. Default is \'ENERGY\'. \'ENTROPY\' is internally re-mapped to \'CROSS_ENTROPY\'.",\n      "enum": [\n        "ENERGY",\n        "ENTROPY",\n        "EUCLIDEAN",\n        "ANGLE",\n        "CORRELATION",\n        "COSINE",\n        "CROSS_ENTROPY",\n        "MAX_ABS_DIFF",\n        "DIFFERENCE"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "description": "If true, divides the stability score by the length of variable, giving a per-element average. Default is false.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- `transfer_fct` (a callable that transforms the post-matrix output before metric comparison) is intentionally omitted from the schema because callables cannot be serialized to JSON; pass it only via direct Python construction.\n- The ENERGY metric is the default and is NOT a standard distance metric — it computes a Hopfield-style energy, not a geometric distance.\n- ENTROPY as metric is silently converted to CROSS_ENTROPY internally; if you need true entropy behavior verify results carefully.\n- matrix is always convolved with HOLLOW_MATRIX before use, so self-connections are always eliminated regardless of what you pass.\n- Passing a 2D matrix as `matrix` requires it to be square with side == len(variable); mismatches raise FunctionError at instantiation, not at call time.\n- If neither default_variable nor input_shapes is provided, the variable shape is flexible and will be inferred at runtime from the first call.'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': '1D array defining the shape '
-                                                       'and default value of the '
-                                                       'activation vector for which '
-                                                       'stability is computed. If '
-                                                       'omitted, use input_shapes '
-                                                       'instead.',
+TOOL_DESCRIPTION = 'Call this tool to create a Stability objective function that measures how stable a neural network state is given a recurrent weight matrix. Use it when you need to quantify network energy or distance-based stability for use as an objective in RecurrentTransferMechanism or other components. Returns a Stability function object that, when called with a 1-d array, outputs a scalar stability value.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "1-d array defining the shape and default value of the input for which stability is computed. Mutually exclusive with input_shapes.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Length of the input array; zeros are used as default values. Cannot be used together with default_variable if they imply different lengths.",\n      "type": "integer"\n    },\n    "matrix": {\n      "description": "Recurrent weight matrix (square, same width as variable length). Can be a 2-d array or a keyword string such as \'HOLLOW_MATRIX\', \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\'. Defaults to HOLLOW_MATRIX (no self-connections).",\n      "oneOf": [\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        },\n        {\n          "type": "string"\n        }\n      ]\n    },\n    "metric": {\n      "description": "Distance metric used to compute stability. Must be a lowercase literal from DistanceMetrics. Default is \'energy\'.",\n      "enum": [\n        "max_abs_diff",\n        "difference",\n        "dot_product",\n        "normed_L0_similarity",\n        "euclidean",\n        "angle",\n        "correlation",\n        "cosine",\n        "entropy",\n        "cross-entropy",\n        "energy"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "description": "If true, divides the stability result by the length of variable. Default is false.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCritical: the `metric` parameter is beartype-enforced and must be lowercase (e.g., \'energy\', not \'ENERGY\'). The uppercase constant names shown in the docstring (ENERGY, HOLLOW_MATRIX, etc.) are Python symbols, not the string values accepted by the constructor. Do NOT pass a `name` argument — Stability.__init__() does not accept it and will raise TypeError. The matrix is convolved with HOLLOW_MATRIX internally to zero out the diagonal, so self-connections are always excluded regardless of the matrix supplied. If both default_variable and input_shapes are provided they must agree (input_shapes == len(default_variable)) or an error is raised.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': '1-d array defining the shape '
+                                                       'and default value of the input '
+                                                       'for which stability is '
+                                                       'computed. Mutually exclusive '
+                                                       'with input_shapes.',
                                         'items': {'type': 'number'},
                                         'type': 'array'},
-                  'input_shapes': { 'description': 'Length of the activation vector. '
-                                                   'Alternative to default_variable; '
-                                                   'zeros are used as values. Raises '
-                                                   'an error if both are specified and '
-                                                   'input_shapes != '
-                                                   'len(default_variable).',
+                  'input_shapes': { 'description': 'Length of the input array; zeros '
+                                                   'are used as default values. Cannot '
+                                                   'be used together with '
+                                                   'default_variable if they imply '
+                                                   'different lengths.',
                                     'type': 'integer'},
-                  'matrix': { 'description': 'Recurrent weight matrix (2D list/array) '
-                                             'or a PsyNeuLink matrix keyword string '
-                                             "(e.g. 'HOLLOW_MATRIX', "
-                                             "'IDENTITY_MATRIX'). Must be square with "
-                                             'side length equal to len(variable). '
-                                             'Internally convolved with HOLLOW_MATRIX '
-                                             'to zero out self-connections. Defaults '
-                                             "to 'HOLLOW_MATRIX'.",
-                              'type': ['array', 'string']},
-                  'metric': { 'description': 'Distance metric used to compare the '
-                                             'original variable with its transformed '
-                                             "version. Default is 'ENERGY'. 'ENTROPY' "
-                                             'is internally re-mapped to '
-                                             "'CROSS_ENTROPY'.",
-                              'enum': [ 'ENERGY',
-                                        'ENTROPY',
-                                        'EUCLIDEAN',
-                                        'ANGLE',
-                                        'CORRELATION',
-                                        'COSINE',
-                                        'CROSS_ENTROPY',
-                                        'MAX_ABS_DIFF',
-                                        'DIFFERENCE'],
+                  'matrix': { 'description': 'Recurrent weight matrix (square, same '
+                                             'width as variable length). Can be a 2-d '
+                                             'array or a keyword string such as '
+                                             "'HOLLOW_MATRIX', 'IDENTITY_MATRIX', "
+                                             "'FULL_CONNECTIVITY_MATRIX'. Defaults to "
+                                             'HOLLOW_MATRIX (no self-connections).',
+                              'oneOf': [ { 'items': { 'items': {'type': 'number'},
+                                                      'type': 'array'},
+                                           'type': 'array'},
+                                         {'type': 'string'}]},
+                  'metric': { 'description': 'Distance metric used to compute '
+                                             'stability. Must be a lowercase literal '
+                                             'from DistanceMetrics. Default is '
+                                             "'energy'.",
+                              'enum': [ 'max_abs_diff',
+                                        'difference',
+                                        'dot_product',
+                                        'normed_L0_similarity',
+                                        'euclidean',
+                                        'angle',
+                                        'correlation',
+                                        'cosine',
+                                        'entropy',
+                                        'cross-entropy',
+                                        'energy'],
                               'type': 'string'},
-                  'normalize': { 'description': 'If true, divides the stability score '
-                                                'by the length of variable, giving a '
-                                                'per-element average. Default is '
+                  'normalize': { 'description': 'If true, divides the stability result '
+                                                'by the length of variable. Default is '
                                                 'false.',
                                  'type': 'boolean'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = '- `transfer_fct` (a callable that transforms the post-matrix output before metric comparison) is intentionally omitted from the schema because callables cannot be serialized to JSON; pass it only via direct Python construction.\n- The ENERGY metric is the default and is NOT a standard distance metric — it computes a Hopfield-style energy, not a geometric distance.\n- ENTROPY as metric is silently converted to CROSS_ENTROPY internally; if you need true entropy behavior verify results carefully.\n- matrix is always convolved with HOLLOW_MATRIX before use, so self-connections are always eliminated regardless of what you pass.\n- Passing a 2D matrix as `matrix` requires it to be square with side == len(variable); mismatches raise FunctionError at instantiation, not at call time.\n- If neither default_variable nor input_shapes is provided, the variable shape is flexible and will be inferred at runtime from the first call.'
+TOOL_NOTES = "Critical: the `metric` parameter is beartype-enforced and must be lowercase (e.g., 'energy', not 'ENERGY'). The uppercase constant names shown in the docstring (ENERGY, HOLLOW_MATRIX, etc.) are Python symbols, not the string values accepted by the constructor. Do NOT pass a `name` argument — Stability.__init__() does not accept it and will raise TypeError. The matrix is convolved with HOLLOW_MATRIX internally to zero out the diagonal, so self-connections are always excluded regardless of the matrix supplied. If both default_variable and input_shapes are provided they must agree (input_shapes == len(default_variable)) or an error is raised."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -87,5 +86,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_stability(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to instantiate a Stability objective function that measures how stable a neural activation pattern is under recurrent self-connections.'
+        'Call this tool to create a Stability objective function that measures how stable a neural network state is given a recurrent weight matrix.'
         return _impl(args or {})

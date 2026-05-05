@@ -74,6 +74,38 @@ def test_resolve_in_passthrough_for_non_handle_strings():
     assert handles.resolve_in("hello") == "hello"
 
 
+def test_resolve_in_translates_function_string_to_pnl_class():
+    """Regression for the captured ``issubclass()`` failure on
+    ``create_transfer_mechanism({"function": "Linear"})``: the schema
+    advertises ``function`` as a string for the LLM, but PNL needs the
+    class object. ``resolve_in`` bridges the two."""
+    pnl = pytest.importorskip("psyneulink")
+    out = handles.resolve_in({"function": "Linear"})
+    assert out["function"] is pnl.Linear
+
+    out = handles.resolve_in({"integrator_function": "AdaptiveIntegrator"})
+    assert out["integrator_function"] is pnl.AdaptiveIntegrator
+
+
+def test_resolve_in_does_not_promote_arbitrary_strings_to_classes():
+    """``name="Linear"`` (a user-chosen mechanism name) must NOT be
+    silently rebound to the ``pnl.Linear`` class."""
+    out = handles.resolve_in({"name": "Linear"})
+    assert out["name"] == "Linear"
+
+
+def test_resolve_in_leaves_unknown_function_strings_alone():
+    """Unknown function class names (typos, future PNL additions) pass
+    through verbatim — better to surface PNL's error than to silently
+    drop the value."""
+    out = handles.resolve_in({"function": "NotARealFunctionClass"})
+    assert out["function"] == "NotARealFunctionClass"
+
+    # Lowercase first letter never matches a class name in PNL convention.
+    out = handles.resolve_in({"function": "linear"})
+    assert out["function"] == "linear"
+
+
 def test_list_and_describe():
     obj = _Dummy("c")
     h = handles.register_handle(obj)["handle"]

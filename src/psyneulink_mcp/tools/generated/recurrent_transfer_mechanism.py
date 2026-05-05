@@ -15,161 +15,120 @@ __pnl_qualname__ = 'psyneulink.RecurrentTransferMechanism'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_recurrent_transfer_mechanism'
-TOOL_DESCRIPTION = 'Use this tool to create a RecurrentTransferMechanism — a single-layer auto-recurrent neural network node that feeds its own output back as input via a weighted self-projection. Call it when modeling attractor dynamics, working memory, competitive inhibition (e.g., lateral inhibition with negative hetero), or any network requiring recurrent connectivity. Returns a configured RecurrentTransferMechanism instance ready to add to a Composition.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "auto": {\n      "description": "Value(s) for the diagonal of the recurrent matrix (self-connections). A scalar applies uniformly; a 1D array of length input_shapes sets a non-uniform diagonal. If both auto and hetero are given, the final matrix = auto_diag + hetero_offdiag.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "clip": {\n      "description": "Two-element [min, max] range to clip output values. E.g. [0, 1] for a unit interval.",\n      "items": {\n        "type": "number"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "combination_function": {\n      "default": "LinearCombination",\n      "description": "Name of the function used to combine RECURRENT and EXTERNAL InputPorts when has_recurrent_input_port is true. Default is \'LinearCombination\' (simple addition).",\n      "type": "string"\n    },\n    "default_variable": {\n      "description": "Default input vector. Use input_shapes for simple size specification instead.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "enable_learning": {\n      "default": false,\n      "description": "If true, configures the mechanism for Hebbian learning on its recurrent projection at construction time. If false (default), learning can be enabled later by calling configure_learning().",\n      "type": "boolean"\n    },\n    "function": {\n      "description": "Transfer function applied to the (combined) input. Common values: \'Linear\', \'Logistic\', \'ReLU\', \'Tanh\'. Inherited from TransferMechanism.",\n      "type": "string"\n    },\n    "has_recurrent_input_port": {\n      "default": false,\n      "description": "If true, recurrent input arrives at a separate InputPort (named RECURRENT) and is combined with external input via combination_function before passing to the transfer function. If false (default), recurrent input is added directly to the primary InputPort.",\n      "type": "boolean"\n    },\n    "hetero": {\n      "description": "Value(s) for the off-diagonal entries of the recurrent matrix (lateral connections). A scalar applies uniformly to all off-diagonal positions; a 2D array of shape [n x n] sets non-uniform lateral weights (diagonal entries are zeroed out). If both auto and hetero are given, the final matrix = auto_diag + hetero_offdiag.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "initial_value": {\n      "description": "Initial value for the mechanism\'s output, used when integrator_mode is true.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Size of the input (and recurrent) layer. Equivalent to setting default_variable shape.",\n      "type": "integer"\n    },\n    "integration_rate": {\n      "description": "Rate of integration (smoothing factor) when integrator_mode is true. Value between 0 and 1; higher = faster integration. Default is 0.5.",\n      "maximum": 1,\n      "minimum": 0,\n      "type": "number"\n    },\n    "integrator_function": {\n      "default": "AdaptiveIntegrator",\n      "description": "Function used for temporal integration when integrator_mode is true. Default is \'AdaptiveIntegrator\'.",\n      "type": "string"\n    },\n    "integrator_mode": {\n      "default": false,\n      "description": "If true, output is integrated over time using integrator_function before being passed to the transfer function.",\n      "type": "boolean"\n    },\n    "learning_condition": {\n      "default": "UPDATE",\n      "description": "When the LearningMechanism executes. \'UPDATE\' (default): after every execution of this mechanism. \'CONVERGENCE\': only when termination_threshold is satisfied (WhenFinished condition).",\n      "enum": [\n        "UPDATE",\n        "CONVERGENCE"\n      ],\n      "type": "string"\n    },\n    "learning_function": {\n      "default": "Hebbian",\n      "description": "Name of the learning function for the LearningMechanism. Default is \'Hebbian\'. Only relevant when enable_learning is true.",\n      "type": "string"\n    },\n    "learning_rate": {\n      "description": "Learning rate for the LearningMechanism. Only relevant when enable_learning is true. If null, the LearningMechanism default is used.",\n      "type": "number"\n    },\n    "matrix": {\n      "description": "Recurrent weight matrix. Can be a 2D array (list of lists), or a keyword string such as \'HOLLOW_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\', \'IDENTITY_MATRIX\'. Diagonal terms are overridden by auto if specified; off-diagonal terms are overridden by hetero if specified. Ignored entirely if both auto and hetero are specified.",\n      "oneOf": [\n        {\n          "type": "string"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Name for the mechanism.",\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Noise added to the output on each execution. Default is 0.0.",\n      "type": "number"\n    },\n    "output_ports": {\n      "description": "List of output ports to include. Standard options beyond TransferMechanism defaults: \'ENERGY\', \'ENTROPY\'. Default is [\'RESULT\'].",\n      "items": {\n        "type": "string"\n      },\n      "type": "array"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nMatrix precedence rules are non-obvious and critical: (1) if auto AND hetero are both specified, matrix is ignored entirely — final matrix = diagonal(auto) + hollow(hetero); (2) if only auto is specified with matrix, auto overrides the diagonal of matrix; (3) if only hetero is specified with matrix, hetero overrides the off-diagonal of matrix; (4) any non-zero diagonal values in a hetero 2D array are silently zeroed before use. Default matrix is HOLLOW_MATRIX (all zeros, including diagonal), not an identity or full matrix. Learning is completely inert unless enable_learning=True at construction or configure_learning() is called afterward — setting learning_enabled=True on an unconfigured mechanism only raises a warning and is ignored. The recurrent projection is an AutoAssociativeProjection from the mechanism\'s primary OutputPort back to its input; it is automatically added as an aux_component to any Composition the mechanism joins. has_recurrent_input_port=True changes the InputPort topology (adds a separate RECURRENT port and renames the primary port EXTERNAL), which affects how external inputs must be provided. LLVM/compiled execution does not support has_recurrent_input_port=True (combination_function path).'
-TOOL_PARAMETERS = { 'properties': { 'auto': { 'description': 'Value(s) for the diagonal of the recurrent '
-                                           'matrix (self-connections). A scalar '
-                                           'applies uniformly; a 1D array of length '
-                                           'input_shapes sets a non-uniform diagonal. '
-                                           'If both auto and hetero are given, the '
-                                           'final matrix = auto_diag + hetero_offdiag.',
+TOOL_DESCRIPTION = 'Call this tool to create a RecurrentTransferMechanism — a single-layer network whose output feeds back to its own input through a configurable recurrent weight matrix. Use it when a model needs winner-take-all competition, sustained activation, or Hebbian self-organization (e.g., lateral inhibition between representations, attractor dynamics, or memory buffers). Returns a handle to the created mechanism that can be added to a Composition.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "auto": {\n      "description": "Diagonal (self-connection) entries. A scalar sets all diagonal entries equally; a 1-D array sets them individually. When auto and hetero are both given, matrix is auto+hetero and the matrix arg is ignored.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "clip": {\n      "description": "[min, max] hard bounds applied to output after the transfer function.",\n      "items": {\n        "type": "number"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "enable_learning": {\n      "default": false,\n      "description": "If true, configures a Hebbian AutoAssociativeLearningMechanism on the recurrent projection at construction time. Learning only takes effect when the mechanism is run inside a Composition.",\n      "type": "boolean"\n    },\n    "has_recurrent_input_port": {\n      "default": false,\n      "description": "If true, the recurrent feedback and external input arrive on separate InputPorts and are summed by combination_function before the transfer function. Required when you need to scale or weight the two streams independently.",\n      "type": "boolean"\n    },\n    "hetero": {\n      "description": "Off-diagonal (lateral) entries. A scalar (e.g. -1 for inhibition) sets all off-diagonal entries; a 2-D array sets them individually (diagonal entries are zeroed). When auto and hetero are both given, the matrix arg is ignored.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "initial_value": {\n      "description": "Initial activation state vector (length must match input_shapes). Used when integrator_mode is true.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Size of the input (and output) vector. Determines the dimensions of the recurrent matrix.",\n      "minimum": 1,\n      "type": "integer"\n    },\n    "integration_rate": {\n      "default": 0.5,\n      "description": "Smoothing factor when integrator_mode is true (0 = no update, 1 = instant). Equivalent to the time constant of a leaky integrator.",\n      "maximum": 1,\n      "minimum": 0,\n      "type": "number"\n    },\n    "integrator_mode": {\n      "default": false,\n      "description": "If true, activation accumulates over time via AdaptiveIntegrator (exponential moving average). Use for leaky-integrator dynamics.",\n      "type": "boolean"\n    },\n    "learning_condition": {\n      "default": "UPDATE",\n      "description": "When the learning mechanism fires: UPDATE = after every execution (default); CONVERGENCE = only when the mechanism\'s termination_threshold is met.",\n      "enum": [\n        "UPDATE",\n        "CONVERGENCE"\n      ],\n      "type": "string"\n    },\n    "learning_rate": {\n      "description": "Step size for the learning function. Ignored if enable_learning is false.",\n      "minimum": 0,\n      "type": "number"\n    },\n    "matrix": {\n      "description": "Recurrent weight matrix. Accepts a keyword string (\'HOLLOW_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\', \'IDENTITY_MATRIX\') or a 2-D numeric array. Must be square with side length equal to input_shapes. Overridden by auto/hetero when both are present.",\n      "oneOf": [\n        {\n          "enum": [\n            "HOLLOW_MATRIX",\n            "FULL_CONNECTIVITY_MATRIX",\n            "IDENTITY_MATRIX",\n            "ZERO_MATRIX"\n          ],\n          "type": "string"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Name for the mechanism (used in logging and graph display).",\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Gaussian noise standard deviation added to the output on each execution.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL — do NOT pass `function` as a string (e.g. \'Logistic\'). This causes `TypeError: issubclass() arg 1 must be a class` deep in TransferMechanism._validate_params because PsyNeuLink tries issubclass() on the raw string. The transfer function cannot be changed through this MCP tool; it defaults to Linear. If you need a nonlinear transfer function (e.g. Logistic), use a different construction path or file a feature request.\n\nPriority rules for matrix construction: (1) if auto AND hetero are both given, matrix = auto_diag + hetero_offdiag (matrix arg ignored); (2) if only auto is given, diagonal of matrix is replaced by auto; (3) if only hetero is given, off-diagonal of matrix is replaced by hetero; (4) otherwise matrix is used as-is (default: HOLLOW_MATRIX = zeros with zero diagonal).\n\nThe recurrent matrix must be square with side length equal to input_shapes. Mismatched sizes raise RecurrentTransferError at construction.\n\nenable_learning=True adds an AutoAssociativeLearningMechanism plus two auxiliary projections as aux_components; these are only wired up when the mechanism is added to a Composition — calling run() on the mechanism in isolation will not trigger learning.\n\nlearning_condition=\'CONVERGENCE\' requires a termination_threshold to be set on the mechanism or the enclosing Composition; without it the learning mechanism never fires.'
+TOOL_PARAMETERS = { 'properties': { 'auto': { 'description': 'Diagonal (self-connection) entries. A '
+                                           'scalar sets all diagonal entries equally; '
+                                           'a 1-D array sets them individually. When '
+                                           'auto and hetero are both given, matrix is '
+                                           'auto+hetero and the matrix arg is ignored.',
                             'oneOf': [ {'type': 'number'},
                                        {'items': {'type': 'number'}, 'type': 'array'}]},
-                  'clip': { 'description': 'Two-element [min, max] range to clip '
-                                           'output values. E.g. [0, 1] for a unit '
-                                           'interval.',
+                  'clip': { 'description': '[min, max] hard bounds applied to output '
+                                           'after the transfer function.',
                             'items': {'type': 'number'},
                             'maxItems': 2,
                             'minItems': 2,
                             'type': 'array'},
-                  'combination_function': { 'default': 'LinearCombination',
-                                            'description': 'Name of the function used '
-                                                           'to combine RECURRENT and '
-                                                           'EXTERNAL InputPorts when '
-                                                           'has_recurrent_input_port '
-                                                           'is true. Default is '
-                                                           "'LinearCombination' "
-                                                           '(simple addition).',
-                                            'type': 'string'},
-                  'default_variable': { 'description': 'Default input vector. Use '
-                                                       'input_shapes for simple size '
-                                                       'specification instead.',
-                                        'items': {'type': 'number'},
-                                        'type': 'array'},
                   'enable_learning': { 'default': False,
-                                       'description': 'If true, configures the '
-                                                      'mechanism for Hebbian learning '
-                                                      'on its recurrent projection at '
-                                                      'construction time. If false '
-                                                      '(default), learning can be '
-                                                      'enabled later by calling '
-                                                      'configure_learning().',
+                                       'description': 'If true, configures a Hebbian '
+                                                      'AutoAssociativeLearningMechanism '
+                                                      'on the recurrent projection at '
+                                                      'construction time. Learning '
+                                                      'only takes effect when the '
+                                                      'mechanism is run inside a '
+                                                      'Composition.',
                                        'type': 'boolean'},
-                  'function': { 'description': 'Transfer function applied to the '
-                                               '(combined) input. Common values: '
-                                               "'Linear', 'Logistic', 'ReLU', 'Tanh'. "
-                                               'Inherited from TransferMechanism.',
-                                'type': 'string'},
                   'has_recurrent_input_port': { 'default': False,
-                                                'description': 'If true, recurrent '
-                                                               'input arrives at a '
-                                                               'separate InputPort '
-                                                               '(named RECURRENT) and '
-                                                               'is combined with '
-                                                               'external input via '
+                                                'description': 'If true, the recurrent '
+                                                               'feedback and external '
+                                                               'input arrive on '
+                                                               'separate InputPorts '
+                                                               'and are summed by '
                                                                'combination_function '
-                                                               'before passing to the '
-                                                               'transfer function. If '
-                                                               'false (default), '
-                                                               'recurrent input is '
-                                                               'added directly to the '
-                                                               'primary InputPort.',
+                                                               'before the transfer '
+                                                               'function. Required '
+                                                               'when you need to scale '
+                                                               'or weight the two '
+                                                               'streams independently.',
                                                 'type': 'boolean'},
-                  'hetero': { 'description': 'Value(s) for the off-diagonal entries of '
-                                             'the recurrent matrix (lateral '
-                                             'connections). A scalar applies uniformly '
-                                             'to all off-diagonal positions; a 2D '
-                                             'array of shape [n x n] sets non-uniform '
-                                             'lateral weights (diagonal entries are '
-                                             'zeroed out). If both auto and hetero are '
-                                             'given, the final matrix = auto_diag + '
-                                             'hetero_offdiag.',
+                  'hetero': { 'description': 'Off-diagonal (lateral) entries. A scalar '
+                                             '(e.g. -1 for inhibition) sets all '
+                                             'off-diagonal entries; a 2-D array sets '
+                                             'them individually (diagonal entries are '
+                                             'zeroed). When auto and hetero are both '
+                                             'given, the matrix arg is ignored.',
                               'oneOf': [ {'type': 'number'},
                                          { 'items': { 'items': {'type': 'number'},
                                                       'type': 'array'},
                                            'type': 'array'}]},
-                  'initial_value': { 'description': "Initial value for the mechanism's "
-                                                    'output, used when integrator_mode '
-                                                    'is true.',
+                  'initial_value': { 'description': 'Initial activation state vector '
+                                                    '(length must match input_shapes). '
+                                                    'Used when integrator_mode is '
+                                                    'true.',
                                      'items': {'type': 'number'},
                                      'type': 'array'},
-                  'input_shapes': { 'description': 'Size of the input (and recurrent) '
-                                                   'layer. Equivalent to setting '
-                                                   'default_variable shape.',
+                  'input_shapes': { 'description': 'Size of the input (and output) '
+                                                   'vector. Determines the dimensions '
+                                                   'of the recurrent matrix.',
+                                    'minimum': 1,
                                     'type': 'integer'},
-                  'integration_rate': { 'description': 'Rate of integration (smoothing '
-                                                       'factor) when integrator_mode '
-                                                       'is true. Value between 0 and '
-                                                       '1; higher = faster '
-                                                       'integration. Default is 0.5.',
+                  'integration_rate': { 'default': 0.5,
+                                        'description': 'Smoothing factor when '
+                                                       'integrator_mode is true (0 = '
+                                                       'no update, 1 = instant). '
+                                                       'Equivalent to the time '
+                                                       'constant of a leaky '
+                                                       'integrator.',
                                         'maximum': 1,
                                         'minimum': 0,
                                         'type': 'number'},
-                  'integrator_function': { 'default': 'AdaptiveIntegrator',
-                                           'description': 'Function used for temporal '
-                                                          'integration when '
-                                                          'integrator_mode is true. '
-                                                          'Default is '
-                                                          "'AdaptiveIntegrator'.",
-                                           'type': 'string'},
                   'integrator_mode': { 'default': False,
-                                       'description': 'If true, output is integrated '
-                                                      'over time using '
-                                                      'integrator_function before '
-                                                      'being passed to the transfer '
-                                                      'function.',
+                                       'description': 'If true, activation accumulates '
+                                                      'over time via '
+                                                      'AdaptiveIntegrator (exponential '
+                                                      'moving average). Use for '
+                                                      'leaky-integrator dynamics.',
                                        'type': 'boolean'},
                   'learning_condition': { 'default': 'UPDATE',
-                                          'description': 'When the LearningMechanism '
-                                                         "executes. 'UPDATE' "
-                                                         '(default): after every '
-                                                         'execution of this mechanism. '
-                                                         "'CONVERGENCE': only when "
+                                          'description': 'When the learning mechanism '
+                                                         'fires: UPDATE = after every '
+                                                         'execution (default); '
+                                                         'CONVERGENCE = only when the '
+                                                         "mechanism's "
                                                          'termination_threshold is '
-                                                         'satisfied (WhenFinished '
-                                                         'condition).',
+                                                         'met.',
                                           'enum': ['UPDATE', 'CONVERGENCE'],
                                           'type': 'string'},
-                  'learning_function': { 'default': 'Hebbian',
-                                         'description': 'Name of the learning function '
-                                                        'for the LearningMechanism. '
-                                                        "Default is 'Hebbian'. Only "
-                                                        'relevant when enable_learning '
-                                                        'is true.',
-                                         'type': 'string'},
-                  'learning_rate': { 'description': 'Learning rate for the '
-                                                    'LearningMechanism. Only relevant '
-                                                    'when enable_learning is true. If '
-                                                    'null, the LearningMechanism '
-                                                    'default is used.',
+                  'learning_rate': { 'description': 'Step size for the learning '
+                                                    'function. Ignored if '
+                                                    'enable_learning is false.',
+                                     'minimum': 0,
                                      'type': 'number'},
-                  'matrix': { 'description': 'Recurrent weight matrix. Can be a 2D '
-                                             'array (list of lists), or a keyword '
-                                             "string such as 'HOLLOW_MATRIX', "
+                  'matrix': { 'description': 'Recurrent weight matrix. Accepts a '
+                                             "keyword string ('HOLLOW_MATRIX', "
                                              "'FULL_CONNECTIVITY_MATRIX', "
-                                             "'IDENTITY_MATRIX'. Diagonal terms are "
-                                             'overridden by auto if specified; '
-                                             'off-diagonal terms are overridden by '
-                                             'hetero if specified. Ignored entirely if '
-                                             'both auto and hetero are specified.',
-                              'oneOf': [ {'type': 'string'},
+                                             "'IDENTITY_MATRIX') or a 2-D numeric "
+                                             'array. Must be square with side length '
+                                             'equal to input_shapes. Overridden by '
+                                             'auto/hetero when both are present.',
+                              'oneOf': [ { 'enum': [ 'HOLLOW_MATRIX',
+                                                     'FULL_CONNECTIVITY_MATRIX',
+                                                     'IDENTITY_MATRIX',
+                                                     'ZERO_MATRIX'],
+                                           'type': 'string'},
                                          { 'items': { 'items': {'type': 'number'},
                                                       'type': 'array'},
                                            'type': 'array'}]},
-                  'name': {'description': 'Name for the mechanism.', 'type': 'string'},
+                  'name': { 'description': 'Name for the mechanism (used in logging '
+                                           'and graph display).',
+                            'type': 'string'},
                   'noise': { 'default': 0,
-                             'description': 'Noise added to the output on each '
-                                            'execution. Default is 0.0.',
-                             'type': 'number'},
-                  'output_ports': { 'description': 'List of output ports to include. '
-                                                   'Standard options beyond '
-                                                   'TransferMechanism defaults: '
-                                                   "'ENERGY', 'ENTROPY'. Default is "
-                                                   "['RESULT'].",
-                                    'items': {'type': 'string'},
-                                    'type': 'array'}},
+                             'description': 'Gaussian noise standard deviation added '
+                                            'to the output on each execution.',
+                             'type': 'number'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = "Matrix precedence rules are non-obvious and critical: (1) if auto AND hetero are both specified, matrix is ignored entirely — final matrix = diagonal(auto) + hollow(hetero); (2) if only auto is specified with matrix, auto overrides the diagonal of matrix; (3) if only hetero is specified with matrix, hetero overrides the off-diagonal of matrix; (4) any non-zero diagonal values in a hetero 2D array are silently zeroed before use. Default matrix is HOLLOW_MATRIX (all zeros, including diagonal), not an identity or full matrix. Learning is completely inert unless enable_learning=True at construction or configure_learning() is called afterward — setting learning_enabled=True on an unconfigured mechanism only raises a warning and is ignored. The recurrent projection is an AutoAssociativeProjection from the mechanism's primary OutputPort back to its input; it is automatically added as an aux_component to any Composition the mechanism joins. has_recurrent_input_port=True changes the InputPort topology (adds a separate RECURRENT port and renames the primary port EXTERNAL), which affects how external inputs must be provided. LLVM/compiled execution does not support has_recurrent_input_port=True (combination_function path)."
+TOOL_NOTES = "CRITICAL — do NOT pass `function` as a string (e.g. 'Logistic'). This causes `TypeError: issubclass() arg 1 must be a class` deep in TransferMechanism._validate_params because PsyNeuLink tries issubclass() on the raw string. The transfer function cannot be changed through this MCP tool; it defaults to Linear. If you need a nonlinear transfer function (e.g. Logistic), use a different construction path or file a feature request.\n\nPriority rules for matrix construction: (1) if auto AND hetero are both given, matrix = auto_diag + hetero_offdiag (matrix arg ignored); (2) if only auto is given, diagonal of matrix is replaced by auto; (3) if only hetero is given, off-diagonal of matrix is replaced by hetero; (4) otherwise matrix is used as-is (default: HOLLOW_MATRIX = zeros with zero diagonal).\n\nThe recurrent matrix must be square with side length equal to input_shapes. Mismatched sizes raise RecurrentTransferError at construction.\n\nenable_learning=True adds an AutoAssociativeLearningMechanism plus two auxiliary projections as aux_components; these are only wired up when the mechanism is added to a Composition — calling run() on the mechanism in isolation will not trigger learning.\n\nlearning_condition='CONVERGENCE' requires a termination_threshold to be set on the mechanism or the enclosing Composition; without it the learning mechanism never fires."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -194,5 +153,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_recurrent_transfer_mechanism(args: dict[str, Any] | None = None) -> Any:
-        'Use this tool to create a RecurrentTransferMechanism — a single-layer auto-recurrent neural network node that feeds its own output back as input via a weighted self-projection.'
+        'Call this tool to create a RecurrentTransferMechanism — a single-layer network whose output feeds back to its own input through a configurable recurrent weight matrix.'
         return _impl(args or {})

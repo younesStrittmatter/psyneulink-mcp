@@ -143,22 +143,83 @@ def resolve_handle(handle: str) -> Any:
         ) from exc
 
 
-def resolve_in(value: Any) -> Any:
+_CLASS_NAME_KEYS: frozenset[str] = frozenset(
+    {
+        # Most generated PNL constructors take a function-type parameter
+        # whose value the JSON schema describes as "name of the X
+        # function class". The agent obediently passes a string like
+        # ``"Linear"``; PNL then calls ``issubclass(value, Function)``
+        # and dies with ``TypeError: issubclass() arg 1 must be a
+        # class``. We resolve those strings to the underlying ``pnl.X``
+        # class before they reach PNL. Listed by key name (not by
+        # *value*) so naming a mechanism literally ``"Linear"`` doesn't
+        # accidentally promote the name to a class object.
+        "function",
+        "integrator_function",
+        "combine_function",
+        "combination_function",
+        "aggregation_function",
+        "objective_function",
+        "output_function",
+        "transfer_function",
+        "noise_function",
+        "selection_function",
+        "exponent",
+        "termination_measure",
+    }
+)
+
+
+def _maybe_resolve_class_name(key: str, value: Any) -> Any:
+    """If *key* is a class-name carrier and *value* is a ``pnl.<value>``
+    class name, return the class object. Otherwise return *value*.
+    """
+    if key not in _CLASS_NAME_KEYS:
+        return value
+    if not isinstance(value, str) or not value:
+        return value
+    if not value[0].isupper():
+        return value
+    try:
+        import inspect
+
+        import psyneulink as pnl
+    except Exception:
+        return value
+    candidate = getattr(pnl, value, None)
+    if candidate is not None and inspect.isclass(candidate):
+        return candidate
+    return value
+
+
+def resolve_in(value: Any, *, _parent_key: str | None = None) -> Any:
     """Walk *value* recursively, swapping handle strings for live objects.
 
     Used by every generated tool's ``_impl`` so an agent can pass a
     previously-returned handle anywhere a PNL constructor expects an
     object: ``create_transfer_mechanism(args={"function": "h_abc..."})``
     just works.
+
+    Also resolves bare class-name strings under known function-type keys
+    (e.g. ``{"function": "Linear"}`` → ``pnl.Linear``). The MCP's
+    JSON-schema-only contract with the LLM means tool descriptions
+    advertise these as strings; PNL itself wants the actual class.
     """
     if is_handle_string(value):
         return resolve_handle(value)
+    # Class-name resolution is keyed by parent dict key, so apply it
+    # only when descending from a dict — never to the top-level call.
+    if _parent_key is not None and isinstance(value, str):
+        return _maybe_resolve_class_name(_parent_key, value)
     if isinstance(value, list):
         return [resolve_in(item) for item in value]
     if isinstance(value, tuple):
         return tuple(resolve_in(item) for item in value)
     if isinstance(value, dict):
-        return {key: resolve_in(item) for key, item in value.items()}
+        return {
+            key: resolve_in(item, _parent_key=key)
+            for key, item in value.items()
+        }
     return value
 
 

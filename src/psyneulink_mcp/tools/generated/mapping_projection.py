@@ -15,55 +15,67 @@ __pnl_qualname__ = 'psyneulink.MappingProjection'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_mapping_projection'
-TOOL_DESCRIPTION = 'Call this tool to create a MappingProjection that transmits the output of one Mechanism\'s OutputPort to the InputPort of another (or the same) Mechanism. Use it when wiring two Mechanisms together in a Composition, optionally specifying a weight matrix and whether the connection can be modified by learning. Returns a MappingProjection object that can be passed to Composition.add_projection() or used inline in pathway specifications.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "learnable": {\n      "default": true,\n      "description": "Whether the matrix can be modified by a LearningMechanism. Set to false to permanently prevent learning on this projection.",\n      "type": "boolean"\n    },\n    "learning_rate": {\n      "description": "Projection-specific learning rate. Only valid when learnable is true. If null or omitted, inherits the Composition\'s learning_rate. Setting this when learnable=false raises an error.",\n      "type": "number"\n    },\n    "matrix": {\n      "description": "Weight matrix transforming sender output to receiver input. Can be a 2D array of numbers, or a keyword string: \'AUTO_ASSIGN_MATRIX\' (default \\u2014 identity if same size, full connectivity otherwise), \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\', \'HOLLOW_MATRIX\'. Use a nested array for explicit weights.",\n      "oneOf": [\n        {\n          "enum": [\n            "AUTO_ASSIGN_MATRIX",\n            "IDENTITY_MATRIX",\n            "FULL_CONNECTIVITY_MATRIX",\n            "HOLLOW_MATRIX"\n          ],\n          "type": "string"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Optional name for the projection. Auto-generated as \'MappingProjection from <sender>[OutputPort] to <receiver>[InputPort]\' if omitted.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Name of the destination Mechanism or its InputPort. If omitted, assignment is deferred until the projection is placed in a Composition.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Name of the source Mechanism or its OutputPort. If omitted, assignment is deferred until the projection is placed in a Composition.",\n      "type": "string"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- If both sender and receiver are omitted, the projection enters deferred initialization and must be fully specified when added to a Composition.\n- matrix defaults to AUTO_ASSIGN_MATRIX: identity matrix when sender and receiver sizes match, full connectivity matrix otherwise. Mismatched sizes with IDENTITY_MATRIX or HOLLOW_MATRIX raise a ProjectionError.\n- Passing learnable=false and a numeric learning_rate simultaneously raises a MappingError at construction time.\n- List inputs for matrix are automatically converted to np.ndarray internally.\n- The matrix ParameterPort uses an AccumulatorIntegrator function internally for learning; do not confuse this with the projection\'s main transform function (MatrixTransform).\n- learning_rate=True or learning_rate=None both resolve to the Composition\'s learning_rate at runtime; only a float/int pins a specific value.'
+TOOL_DESCRIPTION = 'Call this tool to create a weighted connection (MappingProjection) between the OutputPort of one Mechanism and the InputPort of another. Use it whenever you need to wire two mechanisms together in a composition, optionally specifying a weight matrix and whether the connection should be learnable. Returns a handle string to the created MappingProjection object.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "learnable": {\n      "default": true,\n      "description": "If false, the matrix can never be modified by learning, regardless of any learning_rate or Composition-level learning settings.",\n      "type": "boolean"\n    },\n    "learning_rate": {\n      "description": "Projection-specific learning rate. Numeric value overrides Composition default; false disables learning for this projection even if learnable=true; true or omitting inherits Composition learning_rate. Cannot be a numeric value when learnable=false.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "type": "boolean"\n        }\n      ]\n    },\n    "matrix": {\n      "default": "DEFAULT_MATRIX",\n      "description": "Weight matrix or keyword. Defaults to AUTO_ASSIGN_MATRIX (IDENTITY if dimensions match, FULL_CONNECTIVITY otherwise).",\n      "oneOf": [\n        {\n          "description": "Explicit 2D weight matrix; shape must be [sender_output_size x receiver_input_size].",\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        },\n        {\n          "description": "Keyword shorthand for common matrix types.",\n          "enum": [\n            "DEFAULT_MATRIX",\n            "IDENTITY_MATRIX",\n            "FULL_CONNECTIVITY_MATRIX",\n            "HOLLOW_MATRIX",\n            "RANDOM_CONNECTIVITY_MATRIX"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "name": {\n      "description": "Optional name. Auto-generated as \'MappingProjection from <sender>[OutputPort] to <receiver>[InputPort]\' if omitted.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Handle of the destination Mechanism or InputPort. Uses the primary InputPort if a Mechanism handle is given. Omit only when the projection will be assigned implicitly by a composition pathway.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Handle of the source Mechanism or OutputPort. Uses the primary OutputPort if a Mechanism handle is given. Omit only when the projection will be assigned implicitly by a composition pathway.",\n      "type": "string"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nDuplicateProjectionError is raised if an identical projection already exists between the same sender-receiver pair — this has been observed in practice. Before calling this tool, verify no projection already connects the intended sender and receiver (e.g., via list_composition_projections or by tracking what you have already created). Matrix rows correspond to sender output elements and columns to receiver input elements; mismatched dimensions raise ProjectionError unless a keyword string is used (PNL will attempt auto-reshape for FULL_CONNECTIVITY_MATRIX but not IDENTITY_MATRIX or HOLLOW_MATRIX). Specifying a numeric learning_rate when learnable=false raises MappingError at construction time. If sender or receiver is omitted, the projection enters deferred initialization and must be resolved when added to a Composition pathway.'
 TOOL_PARAMETERS = { 'properties': { 'learnable': { 'default': True,
-                                 'description': 'Whether the matrix can be modified by '
-                                                'a LearningMechanism. Set to false to '
-                                                'permanently prevent learning on this '
-                                                'projection.',
+                                 'description': 'If false, the matrix can never be '
+                                                'modified by learning, regardless of '
+                                                'any learning_rate or '
+                                                'Composition-level learning settings.',
                                  'type': 'boolean'},
                   'learning_rate': { 'description': 'Projection-specific learning '
-                                                    'rate. Only valid when learnable '
-                                                    'is true. If null or omitted, '
-                                                    "inherits the Composition's "
-                                                    'learning_rate. Setting this when '
-                                                    'learnable=false raises an error.',
-                                     'type': 'number'},
-                  'matrix': { 'description': 'Weight matrix transforming sender output '
-                                             'to receiver input. Can be a 2D array of '
-                                             'numbers, or a keyword string: '
-                                             "'AUTO_ASSIGN_MATRIX' (default — identity "
-                                             'if same size, full connectivity '
-                                             "otherwise), 'IDENTITY_MATRIX', "
-                                             "'FULL_CONNECTIVITY_MATRIX', "
-                                             "'HOLLOW_MATRIX'. Use a nested array for "
-                                             'explicit weights.',
-                              'oneOf': [ { 'enum': [ 'AUTO_ASSIGN_MATRIX',
+                                                    'rate. Numeric value overrides '
+                                                    'Composition default; false '
+                                                    'disables learning for this '
+                                                    'projection even if '
+                                                    'learnable=true; true or omitting '
+                                                    'inherits Composition '
+                                                    'learning_rate. Cannot be a '
+                                                    'numeric value when '
+                                                    'learnable=false.',
+                                     'oneOf': [ {'type': 'number'},
+                                                {'type': 'boolean'}]},
+                  'matrix': { 'default': 'DEFAULT_MATRIX',
+                              'description': 'Weight matrix or keyword. Defaults to '
+                                             'AUTO_ASSIGN_MATRIX (IDENTITY if '
+                                             'dimensions match, FULL_CONNECTIVITY '
+                                             'otherwise).',
+                              'oneOf': [ { 'description': 'Explicit 2D weight matrix; '
+                                                          'shape must be '
+                                                          '[sender_output_size x '
+                                                          'receiver_input_size].',
+                                           'items': { 'items': {'type': 'number'},
+                                                      'type': 'array'},
+                                           'type': 'array'},
+                                         { 'description': 'Keyword shorthand for '
+                                                          'common matrix types.',
+                                           'enum': [ 'DEFAULT_MATRIX',
                                                      'IDENTITY_MATRIX',
                                                      'FULL_CONNECTIVITY_MATRIX',
-                                                     'HOLLOW_MATRIX'],
-                                           'type': 'string'},
-                                         { 'items': { 'items': {'type': 'number'},
-                                                      'type': 'array'},
-                                           'type': 'array'}]},
-                  'name': { 'description': 'Optional name for the projection. '
-                                           "Auto-generated as 'MappingProjection from "
+                                                     'HOLLOW_MATRIX',
+                                                     'RANDOM_CONNECTIVITY_MATRIX'],
+                                           'type': 'string'}]},
+                  'name': { 'description': 'Optional name. Auto-generated as '
+                                           "'MappingProjection from "
                                            '<sender>[OutputPort] to '
                                            "<receiver>[InputPort]' if omitted.",
                             'type': 'string'},
-                  'receiver': { 'description': 'Name of the destination Mechanism or '
-                                               'its InputPort. If omitted, assignment '
-                                               'is deferred until the projection is '
-                                               'placed in a Composition.',
+                  'receiver': { 'description': 'Handle of the destination Mechanism or '
+                                               'InputPort. Uses the primary InputPort '
+                                               'if a Mechanism handle is given. Omit '
+                                               'only when the projection will be '
+                                               'assigned implicitly by a composition '
+                                               'pathway.',
                                 'type': 'string'},
-                  'sender': { 'description': 'Name of the source Mechanism or its '
-                                             'OutputPort. If omitted, assignment is '
-                                             'deferred until the projection is placed '
-                                             'in a Composition.',
+                  'sender': { 'description': 'Handle of the source Mechanism or '
+                                             'OutputPort. Uses the primary OutputPort '
+                                             'if a Mechanism handle is given. Omit '
+                                             'only when the projection will be '
+                                             'assigned implicitly by a composition '
+                                             'pathway.',
                               'type': 'string'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = "- If both sender and receiver are omitted, the projection enters deferred initialization and must be fully specified when added to a Composition.\n- matrix defaults to AUTO_ASSIGN_MATRIX: identity matrix when sender and receiver sizes match, full connectivity matrix otherwise. Mismatched sizes with IDENTITY_MATRIX or HOLLOW_MATRIX raise a ProjectionError.\n- Passing learnable=false and a numeric learning_rate simultaneously raises a MappingError at construction time.\n- List inputs for matrix are automatically converted to np.ndarray internally.\n- The matrix ParameterPort uses an AccumulatorIntegrator function internally for learning; do not confuse this with the projection's main transform function (MatrixTransform).\n- learning_rate=True or learning_rate=None both resolve to the Composition's learning_rate at runtime; only a float/int pins a specific value."
+TOOL_NOTES = 'DuplicateProjectionError is raised if an identical projection already exists between the same sender-receiver pair — this has been observed in practice. Before calling this tool, verify no projection already connects the intended sender and receiver (e.g., via list_composition_projections or by tracking what you have already created). Matrix rows correspond to sender output elements and columns to receiver input elements; mismatched dimensions raise ProjectionError unless a keyword string is used (PNL will attempt auto-reshape for FULL_CONNECTIVITY_MATRIX but not IDENTITY_MATRIX or HOLLOW_MATRIX). Specifying a numeric learning_rate when learnable=false raises MappingError at construction time. If sender or receiver is omitted, the projection enters deferred initialization and must be resolved when added to a Composition pathway.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -88,5 +100,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_mapping_projection(args: dict[str, Any] | None = None) -> Any:
-        "Call this tool to create a MappingProjection that transmits the output of one Mechanism's OutputPort to the InputPort of another (or the same) Mechanism."
+        'Call this tool to create a weighted connection (MappingProjection) between the OutputPort of one Mechanism and the InputPort of another.'
         return _impl(args or {})
