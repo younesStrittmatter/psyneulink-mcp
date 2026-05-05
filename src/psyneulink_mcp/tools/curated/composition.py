@@ -71,6 +71,12 @@ def register(mcp: Any) -> None:
             "nodes": [name, ...]}`` listing every node in the
             composition after the add.
         """
+        handles.record_call(
+            "add_node",
+            {"composition": composition, "node": node},
+            result_handle=None,
+            tool_layer="curated",
+        )
         comp = handles.resolve_handle(composition)
         n = handles.resolve_handle(node)
         comp.add_node(n)
@@ -102,6 +108,12 @@ def register(mcp: Any) -> None:
         """
         if not nodes:
             raise ValueError("add_linear_pathway requires at least one node")
+        handles.record_call(
+            "add_linear_pathway",
+            {"composition": composition, "nodes": list(nodes)},
+            result_handle=None,
+            tool_layer="curated",
+        )
         comp = handles.resolve_handle(composition)
         objs = [handles.resolve_handle(h) for h in nodes]
         comp.add_linear_processing_pathway(objs)
@@ -141,6 +153,17 @@ def register(mcp: Any) -> None:
         """
         import psyneulink as pnl  # local to keep server import cheap
 
+        handles.record_call(
+            "add_projection",
+            {
+                "composition": composition,
+                "sender": sender,
+                "receiver": receiver,
+                "matrix": matrix,
+            },
+            result_handle=None,
+            tool_layer="curated",
+        )
         comp = handles.resolve_handle(composition)
         s = handles.resolve_handle(sender)
         r = handles.resolve_handle(receiver)
@@ -188,6 +211,16 @@ def register(mcp: Any) -> None:
             of each node, useful for inspecting intermediate
             activations.
         """
+        handles.record_call(
+            "run_composition",
+            {
+                "composition": composition,
+                "inputs": inputs,
+                "num_trials": num_trials,
+            },
+            result_handle=None,
+            tool_layer="curated",
+        )
         comp = handles.resolve_handle(composition)
         run_kwargs: dict[str, Any] = {}
         if inputs:

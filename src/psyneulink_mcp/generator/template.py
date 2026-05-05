@@ -91,13 +91,25 @@ def render_module(
     # produce JSON-serialisable results in practice, but the unified branch
     # keeps the template smaller and also handles factory functions whose
     # return type isn't known statically.
+    # The pre-resolution ``kwargs`` dict (handle strings still verbatim) is
+    # what the session journal wants — ``resolve_in`` mutates the dict's
+    # values in place, so we record_call with the original kwargs and rely
+    # on ``handles.record_call`` to deep-copy before stashing.
     impl_body_lines = [
         "    resolved = handles.resolve_in(kwargs)",
         "    result = target(**resolved)",
         "    try:",
         "        json.dumps(result)",
         "    except (TypeError, ValueError):",
-        "        return handles.register_handle(result)",
+        "        payload = handles.register_handle(result)",
+        "        handles.record_call(",
+        "            TOOL_NAME,",
+        "            kwargs,",
+        "            result_handle=payload.get('handle') if isinstance(payload, dict) else None,",
+        '            tool_layer="generated",',
+        "        )",
+        "        return payload",
+        '    handles.record_call(TOOL_NAME, kwargs, result_handle=None, tool_layer="generated")',
         "    return result",
     ]
 

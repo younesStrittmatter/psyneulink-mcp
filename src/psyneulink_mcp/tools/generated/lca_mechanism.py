@@ -104,7 +104,15 @@ def _impl(kwargs: dict[str, Any]) -> Any:
     try:
         json.dumps(result)
     except (TypeError, ValueError):
-        return handles.register_handle(result)
+        payload = handles.register_handle(result)
+        handles.record_call(
+            TOOL_NAME,
+            kwargs,
+            result_handle=payload.get('handle') if isinstance(payload, dict) else None,
+            tool_layer="generated",
+        )
+        return payload
+    handles.record_call(TOOL_NAME, kwargs, result_handle=None, tool_layer="generated")
     return result
 
 
