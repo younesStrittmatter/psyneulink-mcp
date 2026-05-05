@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'b37a9a3a746dcd09d3a00b9e7b14948d4b3bc4811b7c3e03b834d9ef21c6c2c1'
@@ -42,8 +43,13 @@ TOOL_NOTES = 'All four parameters default to values that implement the identity 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Linear
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

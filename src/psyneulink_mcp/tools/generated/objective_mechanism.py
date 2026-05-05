@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '0addba16e0ce6776d61c74c71c391976d5e10b22286a6dc2ffee5546c7f34506'
@@ -68,8 +69,13 @@ TOOL_NOTES = "- `monitor` is the only required argument; passing `None` or an em
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.ObjectiveMechanism
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

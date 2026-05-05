@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '40d0473c215d0f7fc1340eceefe6bc90ff3c12669bec3a84c7da20bc00432649'
@@ -169,8 +170,13 @@ TOOL_NOTES = '- modulated_mechanisms items must each have a function with a mult
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.LCControlMechanism
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

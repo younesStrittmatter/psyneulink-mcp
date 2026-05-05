@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '727d502b7b4957cd561a58e74e918e070fd3a8d887455c557d122001a171f3f1'
@@ -37,8 +38,13 @@ TOOL_NOTES = '`default_projection_matrix` is NOT a constructor keyword argument 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Pathway
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

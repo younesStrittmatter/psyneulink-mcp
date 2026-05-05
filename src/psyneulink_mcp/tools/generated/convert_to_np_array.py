@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'db91912c173d7b4074cc6c8cf7260cb4b6e2ccfc14be9c06447bab46e578974a'
@@ -36,11 +37,12 @@ TOOL_NOTES = '- `dimension` only accepts 1, 2, or null (omitted); any other inte
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.convert_to_np_array
-    result = target(**kwargs)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
     try:
         json.dumps(result)
     except (TypeError, ValueError):
-        return repr(result)
+        return handles.register_handle(result)
     return result
 
 

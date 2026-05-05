@@ -85,20 +85,21 @@ def render_module(
 
     parameters_literal = pprint.pformat(parameters, sort_dicts=True, width=88, indent=2)
 
-    if symbol.kind == "class":
-        impl_body_lines = [
-            "    instance = target(**kwargs)",
-            "    return repr(instance)",
-        ]
-    else:
-        impl_body_lines = [
-            "    result = target(**kwargs)",
-            "    try:",
-            "        json.dumps(result)",
-            "    except (TypeError, ValueError):",
-            "        return repr(result)",
-            "    return result",
-        ]
+    # Single impl shape for both classes and module-level callables: build
+    # the result, then either return it as-is (JSON-friendly) or stash it
+    # in the handles registry and return a handle payload. Classes never
+    # produce JSON-serialisable results in practice, but the unified branch
+    # keeps the template smaller and also handles factory functions whose
+    # return type isn't known statically.
+    impl_body_lines = [
+        "    resolved = handles.resolve_in(kwargs)",
+        "    result = target(**resolved)",
+        "    try:",
+        "        json.dumps(result)",
+        "    except (TypeError, ValueError):",
+        "        return handles.register_handle(result)",
+        "    return result",
+    ]
 
     docstring_first_line = _first_sentence(description_raw) or tool_name
 
@@ -112,6 +113,7 @@ def render_module(
         "",
         "import psyneulink as pnl",
         "",
+        "from psyneulink_mcp import handles",
         "from psyneulink_mcp.feedback import captured_tool",
         "",
         f"__source_sha256__ = {symbol.source_sha256!r}",

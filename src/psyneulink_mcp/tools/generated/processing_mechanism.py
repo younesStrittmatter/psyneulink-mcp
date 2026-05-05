@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'dfe35aa28c6336d5e8f33aa743164f840aca153be35e4f5a8089509929428014'
@@ -74,8 +75,13 @@ TOOL_NOTES = 'When the mechanism has more than one InputPort AND the function is
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.ProcessingMechanism
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

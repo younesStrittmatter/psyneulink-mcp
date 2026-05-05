@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'd8c007bf89379bd13588392139b4772df8ab11d4616387b02906045f135ac087'
@@ -67,8 +68,13 @@ TOOL_NOTES = "- If both sender and receiver are omitted, the projection enters d
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.MappingProjection
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

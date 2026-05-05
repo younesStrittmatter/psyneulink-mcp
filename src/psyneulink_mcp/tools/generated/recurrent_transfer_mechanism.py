@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '6dd511463825ab750873111bbe9a97bad41947aa3a1231da5c234bbfc7d2405d'
@@ -173,8 +174,13 @@ TOOL_NOTES = "Matrix precedence rules are non-obvious and critical: (1) if auto 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.RecurrentTransferMechanism
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:

@@ -49,6 +49,7 @@ from psyneulink_mcp.generator.introspection import (
     discover_seed_symbols,
 )
 from psyneulink_mcp.generator.prompts import TOOL_SPEC_SCHEMA, render_prompt
+from psyneulink_mcp.generator.rerender import rerender_directory
 from psyneulink_mcp.generator.template import (
     module_filename_for,
     module_stem_for,
@@ -290,11 +291,38 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_SEEDS_FILE,
         help="Path to seeds.txt (default: <repo>/generator/seeds.txt).",
     )
+    parser.add_argument(
+        "--rerender",
+        action="store_true",
+        help=(
+            "Re-template every existing generated module from its on-disk "
+            "metadata. Skips introspection and the LLM. Use after changing "
+            "template.py."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _run_rerender() -> int:
+    written, failures = rerender_directory(GENERATED_DIR)
+    print(
+        f"[generate_tools] re-templated {len(written)} module(s); "
+        f"{len(failures)} failure(s).",
+        file=sys.stderr,
+    )
+    for path, msg in failures:
+        print(f"  - {path.name}: {msg}", file=sys.stderr)
+    # Refresh the index too: rerender doesn't add or remove files but a
+    # stale index from a partial regen could be sitting on disk.
+    _write_init(_existing_stems(GENERATED_DIR), GENERATED_DIR)
+    return 0 if not failures else 1
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+
+    if args.rerender:
+        return _run_rerender()
 
     only = _parse_only(args.only)
 

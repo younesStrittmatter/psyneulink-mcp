@@ -11,3 +11,8 @@ build/
 # Per-developer Claude Code state (project-wide config goes in settings.json,
 # which IS committed; settings.local.json holds local permission grants etc.)
 .claude/settings.local.json
+
+# Runtime feedback artifacts — captured live, archived by the generator.
+# Only the .gitkeep placeholders are tracked.
+feedback/pending/*.jsonl
+feedback/archive/*

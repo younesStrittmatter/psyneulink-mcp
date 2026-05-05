@@ -7,6 +7,7 @@ from typing import Any
 
 import psyneulink as pnl
 
+from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '6272239673b3bb6083202e3f9fee4ae09942dc4a63a9358153f2b78075ea5043'
@@ -123,8 +124,13 @@ TOOL_NOTES = "- `integrator_mode`, `integration_rate`, `initial_value`, and `on_
 
 def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.TransferMechanism
-    instance = target(**kwargs)
-    return repr(instance)
+    resolved = handles.resolve_in(kwargs)
+    result = target(**resolved)
+    try:
+        json.dumps(result)
+    except (TypeError, ValueError):
+        return handles.register_handle(result)
+    return result
 
 
 def register(mcp: Any) -> None:
