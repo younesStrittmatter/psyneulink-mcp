@@ -14,6 +14,19 @@ dependencies = [
 # The default `claude_cli` adapter shells out to the local `claude` CLI and
 # does not need this dep, so the install stays lean.
 anthropic-api = ["anthropic>=0.40"]
+# PSYCHE behavioral-data tools. Pulls in the sibling `psyneulink-psyche`
+# data-convention package + pandas. Server boots fine without this extra;
+# the psyche tools only error at call time. See tools/curated/psyche.py.
+psyche = [
+    "psyneulink-psyche>=0.1",
+    "pandas>=2",
+]
+
+[tool.uv.sources]
+# psyneulink-psyche is not yet on PyPI; resolve it from the sibling repo
+# under the parent `psyneulink-ai/` workspace folder. Editable so changes
+# in the sibling are picked up without a re-sync.
+psyneulink-psyche = { path = "../psyneulink-psyche", editable = true }
 
 [project.scripts]
 psyneulink-mcp           = "psyneulink_mcp.server:main"

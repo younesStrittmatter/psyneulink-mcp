@@ -3254,6 +3254,10 @@ dependencies = [
 anthropic-api = [
     { name = "anthropic" },
 ]
+psyche = [
+    { name = "pandas" },
+    { name = "psyneulink-psyche" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -3265,10 +3269,33 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic-api'", specifier = ">=0.40" },
     { name = "mcp", specifier = ">=1.0.0" },
+    { name = "pandas", marker = "extra == 'psyche'", specifier = ">=2" },
     { name = "psyneulink" },
+    { name = "psyneulink-psyche", marker = "extra == 'psyche'", editable = "../psyneulink-psyche" },
     { name = "pyyaml", specifier = ">=6" },
 ]
-provides-extras = ["anthropic-api"]
+provides-extras = ["anthropic-api", "psyche"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.6" },
+]
+
+[[package]]
+name = "psyneulink-psyche"
+version = "0.1.0"
+source = { editable = "../psyneulink-psyche" }
+dependencies = [
+    { name = "pandas" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pandas", specifier = ">=2" },
+    { name = "pydantic", specifier = ">=2" },
+]
 
 [package.metadata.requires-dev]
 dev = [
