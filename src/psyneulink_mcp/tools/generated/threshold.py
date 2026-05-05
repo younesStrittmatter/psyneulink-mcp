@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '71dd8b64e4c42114b6ed3a65bcfa0e0c48af235b32804fa184e32124e4a37884'
 __pnl_qualname__ = 'psyneulink.Threshold'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_threshold'

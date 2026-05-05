@@ -257,10 +257,18 @@ def test_discover_seed_symbols_live_psyneulink_returns_well_typed_list() -> None
 
     for s in symbols:
         assert s.qualname.startswith("psyneulink.")
-        assert s.kind in {"class", "function"}
+        assert s.kind in {"class", "function", "method"}
         assert s.source
         assert len(s.source_sha256) == 64
-        assert getattr(psyneulink, s.short_name, None) is not None
+        # ``method`` symbols expose the method via the owning class, not
+        # via the ``psyneulink`` top-level — so we only check
+        # top-level attribute presence for class/function kinds.
+        if s.kind in {"class", "function"}:
+            assert getattr(psyneulink, s.short_name, None) is not None
+        else:
+            owner = getattr(psyneulink, s.class_short_name or "", None)
+            assert owner is not None
+            assert getattr(owner, s.short_name, None) is not None
 
 
 def test_discover_seed_symbols_uses_repo_seeds_file_when_provided(

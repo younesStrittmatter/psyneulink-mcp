@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'b37a9a3a746dcd09d3a00b9e7b14948d4b3bc4811b7c3e03b834d9ef21c6c2c1'
 __pnl_qualname__ = 'psyneulink.Linear'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_linear'

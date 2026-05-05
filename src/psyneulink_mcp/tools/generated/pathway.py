@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '727d502b7b4957cd561a58e74e918e070fd3a8d887455c557d122001a171f3f1'
 __pnl_qualname__ = 'psyneulink.Pathway'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_pathway'

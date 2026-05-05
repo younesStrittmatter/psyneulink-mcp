@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import composition, convert_to_np_array, lc_control_mechanism, lca_mechanism, linear, logistic, mapping_projection, normal_dist, objective_mechanism, pathway, processing_mechanism, recurrent_transfer_mechanism, stability, threshold, time_scale, transfer_mechanism
+from . import composition, composition_add_linear_processing_pathway, composition_add_node, composition_add_projection, convert_to_np_array, lc_control_mechanism, lca_mechanism, linear, logistic, mapping_projection, normal_dist, objective_mechanism, pathway, processing_mechanism, recurrent_transfer_mechanism, stability, threshold, time_scale, transfer_mechanism
 
-ALL = (composition, convert_to_np_array, lc_control_mechanism, lca_mechanism, linear, logistic, mapping_projection, normal_dist, objective_mechanism, pathway, processing_mechanism, recurrent_transfer_mechanism, stability, threshold, time_scale, transfer_mechanism,)
+ALL = (composition, composition_add_linear_processing_pathway, composition_add_node, composition_add_projection, convert_to_np_array, lc_control_mechanism, lca_mechanism, linear, logistic, mapping_projection, normal_dist, objective_mechanism, pathway, processing_mechanism, recurrent_transfer_mechanism, stability, threshold, time_scale, transfer_mechanism,)
 
 
 def register_all(mcp: Any) -> None:

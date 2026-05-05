@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'a7616f78670f80e2f98d0ff7c781e2c3edb417162c1f59e88ef1751bcfc1a04d'
 __pnl_qualname__ = 'psyneulink.LCAMechanism'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_lca_mechanism'

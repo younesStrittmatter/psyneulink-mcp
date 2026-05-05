@@ -1,25 +1,31 @@
-"""Curated tools for composing and running PsyNeuLink models.
+"""Curated execution + introspection tools for PsyNeuLink compositions.
 
-These tools are the bridge between the per-class generated tools (which
-each create a single PNL object and return a handle) and an actual
-runnable model. The agent's loop is meant to look like:
+Three of the historically-curated tools (``add_node``,
+``add_linear_pathway``, ``add_projection``) moved to the generated
+layer once captured failures gave the regen loop enough signal to be
+worth iterating on. They now live in ``tools/generated/composition_*.py``
+backed by the seed directives in ``generator/seeds.txt`` and the shared
+runtime helper at :mod:`psyneulink_mcp.method_helpers`.
+
+What stays curated:
+
+* ``run_composition`` — the one execution entry point. The shape of its
+  ``inputs`` argument (``{handle: trial-list-of-lists}``) doesn't map
+  cleanly onto a generated method tool, and the result-massaging
+  (``output_values`` per node, JSON-friendly result coercion) is
+  bespoke enough that the cost of regen-iteration outweighs the
+  benefit.
+* ``list_handles`` / ``describe_handle`` — purely registry queries that
+  exist so the agent can recover from confusion mid-session. No PNL
+  surface to introspect.
+
+The agent's loop is meant to look like:
 
 1. ``create_transfer_mechanism(...)`` → handle ``h_a``
 2. ``create_transfer_mechanism(...)`` → handle ``h_b``
 3. ``create_composition(...)``       → handle ``h_c``
-4. ``add_linear_pathway(composition=h_c, nodes=[h_a, h_b])``
+4. ``add_linear_processing_pathway(composition=h_c, pathway=[h_a, h_b])``
 5. ``run_composition(composition=h_c, inputs={h_a: [[1, 2, 3]]})``
-
-We intentionally keep the surface narrow:
-
-* ``add_node`` / ``add_linear_pathway`` / ``add_projection`` cover the
-  topologies an MVP modeling session needs.
-* ``run_composition`` is the one execution entry point.
-* ``list_handles`` / ``describe_handle`` exist so the agent can recover
-  from confusion mid-session.
-
-Anything more advanced (controllers, learning, custom schedulers) is
-deliberately out of scope until the MVP loop is proven.
 """
 
 from __future__ import annotations
@@ -49,138 +55,7 @@ def _safe_jsonable(value: Any) -> Any:
         return repr(value)
 
 
-def _node_summary(composition: Any) -> list[str]:
-    return [getattr(node, "name", repr(node)) for node in composition.nodes]
-
-
 def register(mcp: Any) -> None:
-    @captured_tool(mcp, layer="curated")
-    def add_node(composition: str, node: str) -> dict[str, Any]:
-        """Add a single Mechanism (or sub-Composition) to a Composition.
-
-        WHEN TO CALL: when wiring a model that doesn't fit a single
-        linear pathway, or when adding an isolated mechanism whose
-        projections you'll specify with ``add_projection``.
-
-        Args:
-            composition: Handle returned by ``create_composition``.
-            node: Handle for the Mechanism / Composition to add.
-
-        Returns:
-            ``{"composition": <handle>, "added": <handle>,
-            "nodes": [name, ...]}`` listing every node in the
-            composition after the add.
-        """
-        handles.record_call(
-            "add_node",
-            {"composition": composition, "node": node},
-            result_handle=None,
-            tool_layer="curated",
-        )
-        comp = handles.resolve_handle(composition)
-        n = handles.resolve_handle(node)
-        comp.add_node(n)
-        handles.bump_revision(composition)
-        return {
-            "composition": composition,
-            "added": node,
-            "nodes": _node_summary(comp),
-        }
-
-    @captured_tool(mcp, layer="curated")
-    def add_linear_pathway(
-        composition: str, nodes: list[str]
-    ) -> dict[str, Any]:
-        """Add an ordered chain of nodes connected by default MappingProjections.
-
-        WHEN TO CALL: feed-forward chains like
-        ``input -> hidden -> output``. PNL inserts a default
-        identity-ish MappingProjection between each consecutive pair.
-
-        Args:
-            composition: Handle returned by ``create_composition``.
-            nodes: Ordered list of Mechanism handles. The first entry
-                becomes an INPUT node of the composition; the last
-                becomes an OUTPUT node.
-
-        Returns:
-            ``{"composition": <handle>, "pathway": [<handle>, ...],
-            "nodes": [name, ...]}``.
-        """
-        if not nodes:
-            raise ValueError("add_linear_pathway requires at least one node")
-        handles.record_call(
-            "add_linear_pathway",
-            {"composition": composition, "nodes": list(nodes)},
-            result_handle=None,
-            tool_layer="curated",
-        )
-        comp = handles.resolve_handle(composition)
-        objs = [handles.resolve_handle(h) for h in nodes]
-        comp.add_linear_processing_pathway(objs)
-        handles.bump_revision(composition)
-        return {
-            "composition": composition,
-            "pathway": list(nodes),
-            "nodes": _node_summary(comp),
-        }
-
-    @captured_tool(mcp, layer="curated")
-    def add_projection(
-        composition: str,
-        sender: str,
-        receiver: str,
-        matrix: Any = None,
-    ) -> dict[str, Any]:
-        """Add an explicit MappingProjection between two existing nodes.
-
-        WHEN TO CALL: a custom weight matrix is required, or the
-        connection pattern isn't a simple linear pathway (e.g.,
-        skip connections, recurrent loops, fan-out).
-
-        Args:
-            composition: Handle returned by ``create_composition``.
-            sender: Handle of the source Mechanism (must already be in
-                the composition; if not, it will be added).
-            receiver: Handle of the target Mechanism (same rule).
-            matrix: Optional weight matrix. Either a 2D list of floats
-                or one of PNL's matrix keywords as a string
-                (``"IDENTITY_MATRIX"``, ``"FULL_CONNECTIVITY_MATRIX"``,
-                ``"RANDOM_CONNECTIVITY_MATRIX"``). ``None`` lets PNL
-                pick its default for the given shapes.
-
-        Returns:
-            ``{"composition": <handle>, "from": <handle>,
-            "to": <handle>}``.
-        """
-        import psyneulink as pnl  # local to keep server import cheap
-
-        handles.record_call(
-            "add_projection",
-            {
-                "composition": composition,
-                "sender": sender,
-                "receiver": receiver,
-                "matrix": matrix,
-            },
-            result_handle=None,
-            tool_layer="curated",
-        )
-        comp = handles.resolve_handle(composition)
-        s = handles.resolve_handle(sender)
-        r = handles.resolve_handle(receiver)
-        kwargs: dict[str, Any] = {"sender": s, "receiver": r}
-        if matrix is not None:
-            kwargs["matrix"] = matrix
-        proj = pnl.MappingProjection(**kwargs)
-        comp.add_projection(proj)
-        handles.bump_revision(composition)
-        return {
-            "composition": composition,
-            "from": sender,
-            "to": receiver,
-        }
-
     @captured_tool(mcp, layer="curated")
     def run_composition(
         composition: str,

@@ -2,8 +2,12 @@
 
 These actually build and run a small PsyNeuLink composition via the
 public tool surface, so they exercise (a) the handles registry, (b) the
-curated composition tools, and (c) the assumption that PNL accepts
-default MappingProjections between two TransferMechanisms.
+remaining curated composition tools, and (c) the assumption that PNL
+accepts default MappingProjections between two TransferMechanisms.
+
+Three of the originally-curated tools (``add_node``,
+``add_linear_pathway``, ``add_projection``) moved to the generated
+layer; their tests now live in ``test_composition_method_tools.py``.
 
 Marked ``integration`` because they import psyneulink (slow). Run with
 ``pytest -m integration`` or as part of the full suite.
@@ -24,8 +28,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def _isolate_feedback_log(monkeypatch, tmp_path):
     """Stop captured-tool errors from these tests from polluting the dev's
-    real feedback/pending/issues.jsonl. ``test_add_linear_pathway_rejects_empty``
-    deliberately raises through ``captured_tool``."""
+    real feedback/pending/issues.jsonl."""
     monkeypatch.setenv(
         feedback.ENV_FEEDBACK_PATH, str(tmp_path / "issues.jsonl")
     )
@@ -81,27 +84,27 @@ def _name_of(handle: str) -> str:
     return handles.resolve_handle(handle).name
 
 
-def test_add_node_appears_in_node_list(tools):
-    h_comp = _make_composition()
-    h_node = _make_transfer("a")
-    out = tools["add_node"](composition=h_comp, node=h_node)
-    assert out["composition"] == h_comp
-    assert out["added"] == h_node
-    assert _name_of(h_node) in out["nodes"]
+def test_run_composition_returns_per_node_output(tools):
+    """``run_composition`` produces a JSON-serialisable result + per-node output.
 
+    Wires a 3-node feed-forward chain via the *generated* method tool
+    (the migrated path) so this also smoke-tests that ``run_composition``
+    still pairs correctly with the new layer split.
+    """
+    import psyneulink as pnl
 
-def test_add_linear_pathway_runs_end_to_end(tools):
-    h_in = _make_transfer("in_node")
-    h_hidden = _make_transfer("hidden")
-    h_out = _make_transfer("out_node")
-    h_comp = _make_composition()
-
-    pathway = tools["add_linear_pathway"](
-        composition=h_comp, nodes=[h_in, h_hidden, h_out]
+    from psyneulink_mcp.tools.generated import (
+        composition_add_linear_processing_pathway as gen_pathway,
     )
-    assert pathway["pathway"] == [h_in, h_hidden, h_out]
-    for h in (h_in, h_hidden, h_out):
-        assert _name_of(h) in pathway["nodes"]
+
+    h_in = _make_transfer("rc_in")
+    h_hidden = _make_transfer("rc_hidden")
+    h_out = _make_transfer("rc_out")
+    h_comp = _make_composition(name="rc_comp")
+
+    gen_pathway._impl(
+        {"composition": h_comp, "pathway": [h_in, h_hidden, h_out]}
+    )
 
     result = tools["run_composition"](
         composition=h_comp, inputs={h_in: [[1.0]]}
@@ -109,42 +112,9 @@ def test_add_linear_pathway_runs_end_to_end(tools):
     assert result["composition"] == h_comp
     assert _name_of(h_in) in result["output_values"]
     assert _name_of(h_out) in result["output_values"]
-
-
-def test_add_linear_pathway_rejects_empty(tools):
-    h_comp = _make_composition()
-    with pytest.raises(ValueError):
-        tools["add_linear_pathway"](composition=h_comp, nodes=[])
-
-
-def test_add_projection_with_explicit_matrix(tools):
-    """Smoke: add_projection accepts a literal matrix and the composition runs.
-
-    We deliberately don't pin the numerical output here — exact values
-    depend on which nodes PNL classifies as INPUT vs INTERNAL when
-    they're added with bare ``add_node``, and the MVP only needs to
-    prove the surface (projection added, run produces output for both
-    nodes) works.
-    """
-    h_a = _make_transfer("a")
-    h_b = _make_transfer("b")
-    h_comp = _make_composition()
-    tools["add_node"](composition=h_comp, node=h_a)
-    tools["add_node"](composition=h_comp, node=h_b)
-
-    out = tools["add_projection"](
-        composition=h_comp,
-        sender=h_a,
-        receiver=h_b,
-        matrix=[[2.0]],
-    )
-    assert out == {"composition": h_comp, "from": h_a, "to": h_b}
-
-    run = tools["run_composition"](
-        composition=h_comp, inputs={h_a: [[3.0]]}
-    )
-    assert _name_of(h_a) in run["output_values"]
-    assert _name_of(h_b) in run["output_values"]
+    # ``Composition.run`` returns an ``ndarray`` — the curated tool
+    # is responsible for coercing that to a JSON-friendly shape.
+    assert not isinstance(result["result"], pnl.Composition)
 
 
 def test_list_and_describe(tools):

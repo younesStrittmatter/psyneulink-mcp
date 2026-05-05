@@ -1,14 +1,31 @@
 # Seed list for scripts/generate_tools.py.
 #
-# Three directives are supported:
-#   import-walk: <module>   walk the package's .py files; pull every
-#                           psyneulink symbol they import.
-#   symbol: <qualname>      include this symbol regardless.
-#   package: <module>       include every public class/function in this
-#                           package. Wide; use sparingly.
+# Four directives are supported:
+#   import-walk: <module>           walk the package's .py files; pull every
+#                                   psyneulink symbol they import.
+#   symbol:      <qualname>         include this symbol regardless.
+#   package:     <module>           include every public class/function in this
+#                                   package. Wide; use sparingly.
+#   method:      <Class.method>     include a single bound method on a class;
+#                                   the generated tool resolves the bound
+#                                   instance from a `composition` kwarg before
+#                                   dispatching the call. Used for surfaces
+#                                   that aren't constructors (e.g.,
+#                                   `Composition.add_node`).
 #
 # Lines starting with `#` and blank lines are ignored.
 
 # Default surface: the canonical "this is how PNL is meant to be used"
 # example library that ships with PsyNeuLink. Edit to extend.
 import-walk: psyneulink.library.models
+
+# Composition-mutating methods. These were curated tools until they
+# acquired enough captured-feedback signal (matrix=IDENTITY_MATRIX,
+# CompositionError on missing nodes, DuplicateProjectionError on retry)
+# to deserve the regen loop. The generator's method support resolves
+# `composition` from the first kwarg; per-method special-cases (defensive
+# sender/receiver pre-add, duplicate-as-success swallow) live in
+# psyneulink_mcp/method_helpers.py and are pinned across regens.
+method: psyneulink.Composition.add_node
+method: psyneulink.Composition.add_projection
+method: psyneulink.Composition.add_linear_processing_pathway

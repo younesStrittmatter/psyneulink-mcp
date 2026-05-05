@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'de17cf9ecd25c17be6774214f9d9eb24ae9a159e939dee1e5ce23aeee1b6d149'
 __pnl_qualname__ = 'psyneulink.Logistic'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_logistic'

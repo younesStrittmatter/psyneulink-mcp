@@ -45,7 +45,10 @@ def tool_name_for(symbol: SymbolMeta) -> str:
     Classes get a ``create_`` prefix because the underlying call is
     ``cls(**kwargs)`` — naming it ``create_transfer_mechanism`` reads
     better to an LLM consumer than just ``transfer_mechanism``.
-    Functions keep their snake-cased name.
+    Functions and methods keep their snake-cased name. (Methods use the
+    bare PNL method name on purpose — agents already know
+    ``add_node`` / ``add_projection`` and the LLM-consumer descriptions
+    spell out which class the call binds to.)
     """
     base = snake_case(symbol.short_name)
     if keyword.iskeyword(base):
@@ -56,12 +59,20 @@ def tool_name_for(symbol: SymbolMeta) -> str:
 
 
 def module_filename_for(symbol: SymbolMeta) -> str:
-    """Filename inside ``tools/generated/`` for this symbol."""
-    return f"{snake_case(symbol.short_name)}.py"
+    """Filename inside ``tools/generated/`` for this symbol.
+
+    Methods are namespaced by their owning class so two same-named
+    methods on different classes don't collide on the filesystem
+    (e.g. ``Composition.add_node`` and a hypothetical
+    ``Pathway.add_node`` both become valid module stems).
+    """
+    return f"{module_stem_for(symbol)}.py"
 
 
 def module_stem_for(symbol: SymbolMeta) -> str:
     """Importable stem of the generated module (filename without ``.py``)."""
+    if symbol.kind == "method" and symbol.class_short_name:
+        return f"{snake_case(symbol.class_short_name)}_{snake_case(symbol.short_name)}"
     return snake_case(symbol.short_name)
 
 
@@ -85,17 +96,78 @@ def render_module(
 
     parameters_literal = pprint.pformat(parameters, sort_dicts=True, width=88, indent=2)
 
-    # Single impl shape for both classes and module-level callables: build
-    # the result, then either return it as-is (JSON-friendly) or stash it
-    # in the handles registry and return a handle payload. Classes never
-    # produce JSON-serialisable results in practice, but the unified branch
-    # keeps the template smaller and also handles factory functions whose
-    # return type isn't known statically.
-    # The pre-resolution ``kwargs`` dict (handle strings still verbatim) is
-    # what the session journal wants — ``resolve_in`` mutates the dict's
-    # values in place, so we record_call with the original kwargs and rely
-    # on ``handles.record_call`` to deep-copy before stashing.
-    impl_body_lines = [
+    docstring_first_line = _first_sentence(description_raw) or tool_name
+
+    if symbol.kind == "method":
+        impl_lines = _render_method_impl(symbol)
+    else:
+        impl_lines = _render_constructor_impl(symbol)
+
+    lines = [
+        '"""Auto-generated. Do not edit by hand. Regen via scripts/generate_tools.py."""',
+        "",
+        "from __future__ import annotations",
+        "",
+        "import json",
+        "from typing import Any",
+        "",
+        "import psyneulink as pnl",
+        "",
+        "from psyneulink_mcp import handles",
+        "from psyneulink_mcp.feedback import captured_tool",
+    ]
+    if symbol.kind == "method":
+        lines.append("from psyneulink_mcp import method_helpers")
+    lines += [
+        "",
+        f"__source_sha256__ = {symbol.source_sha256!r}",
+        f"__pnl_qualname__ = {symbol.qualname!r}",
+        f"__pnl_kind__ = {symbol.kind!r}",
+        f"__generated_by__ = {generated_by!r}",
+        "",
+        f"TOOL_NAME = {tool_name!r}",
+        f"TOOL_DESCRIPTION = {description_with_schema!r}",
+        f"TOOL_PARAMETERS = {parameters_literal}",
+        f"TOOL_NOTES = {notes!r}",
+        "",
+        "",
+        *impl_lines,
+        "",
+        "",
+        "def register(mcp: Any) -> None:",
+        '    @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)',
+        # FastMCP derives an MCP `inputSchema` from the function signature.
+        # `**kwargs` would surface as a single required `kwargs` arg
+        # rather than passing through the LLM's chosen parameters, so
+        # we declare an explicit `args: dict` parameter that the impl
+        # then unpacks. The real per-symbol schema lives in
+        # TOOL_PARAMETERS / TOOL_DESCRIPTION for the LLM consumer.
+        f"    def {tool_name}(args: dict[str, Any] | None = None) -> Any:",
+        f"        {docstring_first_line!r}",
+        "        return _impl(args or {})",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _render_constructor_impl(symbol: SymbolMeta) -> list[str]:
+    """``_impl`` body for class / function symbols.
+
+    Single shape for both classes and module-level callables: build the
+    result, then either return it as-is (JSON-friendly) or stash it in
+    the handles registry and return a handle payload. Classes never
+    produce JSON-serialisable results in practice, but the unified branch
+    keeps the template smaller and also handles factory functions whose
+    return type isn't known statically.
+
+    The pre-resolution ``kwargs`` dict (handle strings still verbatim) is
+    what the session journal wants — ``resolve_in`` mutates the dict's
+    values in place, so we record_call with the original kwargs and rely
+    on ``handles.record_call`` to deep-copy before stashing.
+    """
+    return [
+        "def _impl(kwargs: dict[str, Any]) -> Any:",
+        f"    target = pnl.{symbol.short_name}",
         "    resolved = handles.resolve_in(kwargs)",
         "    result = target(**resolved)",
         "    try:",
@@ -113,50 +185,35 @@ def render_module(
         "    return result",
     ]
 
-    docstring_first_line = _first_sentence(description_raw) or tool_name
 
-    lines = [
-        '"""Auto-generated. Do not edit by hand. Regen via scripts/generate_tools.py."""',
-        "",
-        "from __future__ import annotations",
-        "",
-        "import json",
-        "from typing import Any",
-        "",
-        "import psyneulink as pnl",
-        "",
-        "from psyneulink_mcp import handles",
-        "from psyneulink_mcp.feedback import captured_tool",
-        "",
-        f"__source_sha256__ = {symbol.source_sha256!r}",
-        f"__pnl_qualname__ = {symbol.qualname!r}",
-        f"__generated_by__ = {generated_by!r}",
-        "",
-        f"TOOL_NAME = {tool_name!r}",
-        f"TOOL_DESCRIPTION = {description_with_schema!r}",
-        f"TOOL_PARAMETERS = {parameters_literal}",
-        f"TOOL_NOTES = {notes!r}",
-        "",
-        "",
+def _render_method_impl(symbol: SymbolMeta) -> list[str]:
+    """``_impl`` body for method symbols.
+
+    Methods bind to a live PNL object — the agent passes the bound
+    instance as a kwarg (``composition`` for ``Composition.add_*``,
+    matching the ``_scan_for_composition_handle`` convention the UI
+    relies on). The shared helper at :mod:`psyneulink_mcp.method_helpers`
+    pops the instance handle, resolves remaining kwargs, dispatches the
+    call, bumps the composition revision counter, and journals the call
+    with ``tool_layer="generated"``.
+
+    Per-method special cases (``add_projection``'s defensive
+    sender/receiver pre-add and DuplicateProjectionError swallow) live
+    in the helper too — keeping them out of the template means a regen
+    can't accidentally drop them.
+    """
+    cls_name = symbol.class_short_name or ""
+    method_name = symbol.short_name
+    return [
         "def _impl(kwargs: dict[str, Any]) -> Any:",
-        f"    target = pnl.{symbol.short_name}",
-        *impl_body_lines,
-        "",
-        "",
-        "def register(mcp: Any) -> None:",
-        '    @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)',
-        # FastMCP derives an MCP `inputSchema` from the function signature.
-        # `**kwargs` would surface as a single required `kwargs` arg
-        # rather than passing through the LLM's chosen parameters, so
-        # we declare an explicit `args: dict` parameter that the impl
-        # then unpacks. The real per-symbol schema lives in
-        # TOOL_PARAMETERS / TOOL_DESCRIPTION for the LLM consumer.
-        f"    def {tool_name}(args: dict[str, Any] | None = None) -> Any:",
-        f"        {docstring_first_line!r}",
-        "        return _impl(args or {})",
-        "",
+        f"    cls = pnl.{cls_name}",
+        "    return method_helpers.call_method_tool(",
+        "        owner_cls=cls,",
+        f"        method_name={method_name!r},",
+        "        kwargs=kwargs,",
+        "        tool_name=TOOL_NAME,",
+        "    )",
     ]
-    return "\n".join(lines)
 
 
 def render_init(stems: list[str]) -> str:

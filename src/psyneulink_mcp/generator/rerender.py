@@ -34,6 +34,12 @@ _REQUIRED_CONSTANTS = (
     "TOOL_PARAMETERS",
     "TOOL_NOTES",
 )
+# ``__pnl_kind__`` is optional for backward compatibility with modules
+# generated before method support landed. When present it pins the kind
+# verbatim; when absent, the legacy ``create_*``-vs-everything-else
+# heuristic is used (those modules are class- or function-kind by
+# definition — no method module ever existed without ``__pnl_kind__``).
+_OPTIONAL_CONSTANTS = ("__pnl_kind__",)
 
 
 class RerenderError(RuntimeError):
@@ -43,13 +49,14 @@ class RerenderError(RuntimeError):
 def _extract_constants(source: str, path: Path) -> dict[str, Any]:
     tree = ast.parse(source, filename=str(path))
     out: dict[str, Any] = {}
+    wanted = set(_REQUIRED_CONSTANTS) | set(_OPTIONAL_CONSTANTS)
     for node in tree.body:
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
             continue
         target = node.targets[0]
         if not isinstance(target, ast.Name):
             continue
-        if target.id not in _REQUIRED_CONSTANTS:
+        if target.id not in wanted:
             continue
         try:
             out[target.id] = ast.literal_eval(node.value)
@@ -86,16 +93,30 @@ def rerender_path(path: Path) -> Path:
     constants = _extract_constants(source, path)
 
     qualname: str = constants["__pnl_qualname__"]
-    short_name = qualname.rsplit(".", 1)[-1]
     tool_name: str = constants["TOOL_NAME"]
-    kind = "class" if tool_name.startswith("create_") else "function"
+
+    explicit_kind = constants.get("__pnl_kind__")
+    if explicit_kind in {"class", "function", "method"}:
+        kind = explicit_kind
+    else:
+        kind = "class" if tool_name.startswith("create_") else "function"
+
+    if kind == "method":
+        # ``psyneulink.Composition.add_projection`` → module is
+        # ``psyneulink``; the class qualname (``...Composition``) is
+        # captured implicitly via SymbolMeta.class_qualname.
+        module_qualname = qualname.split(".", 1)[0]
+    else:
+        module_qualname = (
+            qualname.rsplit(".", 1)[0] if "." in qualname else qualname
+        )
 
     symbol = SymbolMeta(
         qualname=qualname,
         kind=kind,  # type: ignore[arg-type]
         source="",  # not consulted by render_module
         docstring=None,
-        module=qualname.rsplit(".", 1)[0] if "." in qualname else qualname,
+        module=module_qualname,
         source_sha256=constants["__source_sha256__"],
     )
 

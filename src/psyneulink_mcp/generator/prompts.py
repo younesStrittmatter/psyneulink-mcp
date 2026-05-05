@@ -50,7 +50,7 @@ a fixed template that calls `psyneulink.{short_name}` with the agent's kwargs.
 Symbol:  {qualname}
 Kind:    {kind}
 Module:  {module}
-
+{kind_addendum}
 --- DOCSTRING ---
 {docstring}
 
@@ -85,6 +85,72 @@ Output ONLY the structured ToolSpec; no prose, no markdown.
 """
 
 
+# Extra context the LLM needs for method-kind seeds. Methods on
+# PsyNeuLink classes (e.g. ``Composition.add_projection``) bind to a
+# live instance at runtime; the generated tool's ``_impl`` resolves
+# that instance from a ``composition`` handle kwarg. The runtime
+# helper at ``psyneulink_mcp.method_helpers.call_method_tool`` also
+# bakes in a few defensive behaviours that aren't in the PNL source —
+# without this addendum the LLM emits descriptions that contradict the
+# helper's actual semantics (e.g. "you must add nodes first" when the
+# helper auto-adds them).
+_METHOD_ADDENDUM_TEMPLATE = """
+Method-kind contract (read carefully — this changes what you should put in
+description / parameters / notes):
+
+- The generated tool is bound to a live `{class_short_name}` instance at call
+  time. The agent passes that instance as a `composition` handle string. Your
+  `parameters` schema MUST list `composition` as a string property and put
+  it in `required`. Describe `composition` as the handle returned by
+  `create_composition` (or the analogous constructor for the bound class).
+
+- Do NOT include the `self` / `context` parameters of the underlying Python
+  method in your schema — they're managed by the runtime.
+
+- The runtime helper (`psyneulink_mcp.method_helpers.call_method_tool`)
+  resolves every PsyNeuLink-handle kwarg from string → live object before
+  dispatching the call, and also resolves bare class-name strings under
+  function-type keys (e.g. `function="Linear"` → `pnl.Linear`). Document
+  parameters in handle-string terms.
+
+{method_specific_addendum}
+"""
+
+
+_METHOD_SPECIFIC_ADDENDA: dict[str, str] = {
+    "psyneulink.Composition.add_projection": (
+        "- For `add_projection` SPECIFICALLY: the runtime helper "
+        "DEFENSIVELY adds the sender and receiver to the composition before "
+        "creating the projection (PsyNeuLink no-ops if either is already "
+        "in). Captured failures showed agents trip over "
+        "`CompositionError: ... not (yet) in it`; the helper now prevents "
+        "those. Reflect this in the description: the agent does NOT have "
+        "to call `add_node` first.\n"
+        "- The helper also TREATS `DuplicateProjectionError` AS A NO-OP "
+        "SUCCESS — the desired wiring already exists. Mention that "
+        "retrying an `add_projection` is safe.\n"
+        "- The PNL parameter is `default_matrix`, not `matrix`. Captured "
+        "failures showed agents passing `matrix='IDENTITY_MATRIX'` "
+        "directly to a free-standing `MappingProjection`, which trips a "
+        "PNL parameter-port bug. The helper translates either kwarg name "
+        "to PNL's `default_matrix` for you, but the schema you emit "
+        "should advertise `default_matrix` (a 2-D numeric array OR a PNL "
+        "matrix-keyword string like `IDENTITY_MATRIX`, "
+        "`FULL_CONNECTIVITY_MATRIX`, `HOLLOW_MATRIX`, "
+        "`RANDOM_CONNECTIVITY_MATRIX`)."
+    ),
+    "psyneulink.Composition.add_node": (
+        "- Adding a node that is already in the Composition is a silent "
+        "no-op; the agent can call this defensively without checking."
+    ),
+    "psyneulink.Composition.add_linear_processing_pathway": (
+        "- Use this for feed-forward chains. The first PNL parameter is "
+        "called `pathway` (an ordered list of node handles). Auto-created "
+        "default MappingProjections wire each consecutive pair."
+    ),
+}
+
+
 def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str:
     """Render the user-prompt for one symbol.
 
@@ -96,11 +162,20 @@ def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str
         if not feedback
         else "\n".join(repr(entry) for entry in feedback)
     )
+    if symbol.kind == "method":
+        method_addendum = _METHOD_SPECIFIC_ADDENDA.get(symbol.qualname, "")
+        kind_addendum = _METHOD_ADDENDUM_TEMPLATE.format(
+            class_short_name=symbol.class_short_name or "?",
+            method_specific_addendum=method_addendum,
+        )
+    else:
+        kind_addendum = ""
     return PROMPT_TEMPLATE.format(
         qualname=symbol.qualname,
         short_name=symbol.short_name,
         kind=symbol.kind,
         module=symbol.module,
+        kind_addendum=kind_addendum,
         docstring=symbol.docstring or "(no docstring)",
         source=symbol.source,
         feedback=feedback_text,

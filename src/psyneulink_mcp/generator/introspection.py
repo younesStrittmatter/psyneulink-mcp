@@ -1,6 +1,6 @@
 """Resolve PNL symbols from a seed file (or default to the bundled models).
 
-Three directives are supported in ``generator/seeds.txt``:
+Four directives are supported in ``generator/seeds.txt``:
 
 * ``import-walk: <module>`` — walk every ``.py`` file in the module's
   package directory; for each ``Import`` / ``ImportFrom`` node, resolve
@@ -9,6 +9,11 @@ Three directives are supported in ``generator/seeds.txt``:
 * ``symbol: <qualname>`` — include the named symbol regardless.
 * ``package: <module>`` — include every public class/function in the
   named package. Wide; use sparingly.
+* ``method: <class_qualname>.<method_name>`` — include a single method
+  defined on a class. The generator emits a tool whose ``_impl`` pops a
+  ``composition`` (or other instance) handle from kwargs, resolves it,
+  and dispatches to ``instance.<method_name>(**rest)``. Use for PNL
+  surfaces that aren't constructors (``Composition.add_node`` etc.).
 
 All results are deduped by qualname and sorted, so generator runs are
 diff-friendly.
@@ -35,10 +40,15 @@ class SymbolMeta:
 
     ``source_sha256`` lets the orchestrator skip regenerating a tool
     when the upstream source hasn't changed.
+
+    For ``kind == "method"``, ``qualname`` includes the owning class:
+    e.g. ``psyneulink.Composition.add_projection``. The class qualname
+    is exposed via :attr:`class_qualname`; ``short_name`` is just the
+    method name (the last segment).
     """
 
     qualname: str
-    kind: Literal["class", "function"]
+    kind: Literal["class", "function", "method"]
     source: str
     docstring: str | None
     module: str
@@ -48,12 +58,28 @@ class SymbolMeta:
     def short_name(self) -> str:
         return self.qualname.rsplit(".", 1)[-1]
 
+    @property
+    def class_qualname(self) -> str | None:
+        """Qualname of the class that owns this method (method kind only)."""
+        if self.kind != "method":
+            return None
+        parent, _, _ = self.qualname.rpartition(".")
+        return parent or None
+
+    @property
+    def class_short_name(self) -> str | None:
+        """Short name of the owning class (method kind only)."""
+        parent = self.class_qualname
+        if parent is None:
+            return None
+        return parent.rsplit(".", 1)[-1]
+
 
 @dataclass(frozen=True)
 class SeedDirective:
     """One non-comment line from ``seeds.txt``."""
 
-    kind: Literal["import-walk", "symbol", "package"]
+    kind: Literal["import-walk", "symbol", "package", "method"]
     target: str
 
 
@@ -83,10 +109,10 @@ def parse_seeds_file(path: Path) -> list[SeedDirective]:
         kind_raw, _, target_raw = line.partition(":")
         kind = kind_raw.strip()
         target = target_raw.strip()
-        if kind not in {"import-walk", "symbol", "package"}:
+        if kind not in {"import-walk", "symbol", "package", "method"}:
             raise ValueError(
                 f"{path}:{lineno}: unknown seed directive kind {kind!r}; "
-                "expected one of import-walk, symbol, package"
+                "expected one of import-walk, symbol, package, method"
             )
         if not target:
             raise ValueError(f"{path}:{lineno}: empty target in seed directive")
@@ -109,6 +135,7 @@ def discover_from_directives(
 ) -> list[SymbolMeta]:
     """Run every directive and return a deduped, sorted symbol list."""
     qualnames: set[str] = set()
+    method_qualnames: set[str] = set()
     for d in directives:
         if d.kind == "import-walk":
             qualnames.update(_qualnames_from_import_walk(d.target))
@@ -116,12 +143,24 @@ def discover_from_directives(
             qualnames.add(d.target)
         elif d.kind == "package":
             qualnames.update(_qualnames_from_package(d.target))
+        elif d.kind == "method":
+            method_qualnames.add(d.target)
 
     symbols: list[SymbolMeta] = []
+    # ``method`` qualnames need a different resolver because the parent
+    # of the last segment is a class, not a module — ``importlib`` will
+    # refuse to import ``psyneulink.Composition`` as a module.
+    for qualname in sorted(method_qualnames):
+        meta = _resolve_method_qualname(qualname)
+        if meta is not None:
+            symbols.append(meta)
     for qualname in sorted(qualnames):
         meta = _resolve_qualname(qualname)
         if meta is not None:
             symbols.append(meta)
+    # Re-sort across both kinds for diff-friendly output (matches the
+    # pre-method-support behaviour for class+function seeds).
+    symbols.sort(key=lambda s: (s.qualname, s.kind))
     return symbols
 
 
@@ -277,5 +316,50 @@ def _resolve_qualname(qualname: str) -> SymbolMeta | None:
         source=source,
         docstring=inspect.getdoc(obj),
         module=getattr(obj, "__module__", package_qualname),
+        source_sha256=hashlib.sha256(source.encode("utf-8")).hexdigest(),
+    )
+
+
+def _resolve_method_qualname(qualname: str) -> SymbolMeta | None:
+    """Resolve ``pkg.ClassName.method_name`` to a method-kind :class:`SymbolMeta`.
+
+    Returns ``None`` when:
+    * the parent qualname doesn't resolve to a class,
+    * the named attribute is missing or isn't a function/descriptor,
+    * the source can't be read (C-implemented descriptors etc.).
+    """
+    class_qualname, _, method_name = qualname.rpartition(".")
+    if not class_qualname or not method_name:
+        return None
+    class_meta = _resolve_qualname(class_qualname)
+    if class_meta is None or class_meta.kind != "class":
+        return None
+    try:
+        package = importlib.import_module(
+            class_qualname.rpartition(".")[0]
+        )
+        cls = getattr(package, class_meta.short_name)
+    except (ImportError, AttributeError):
+        return None
+    method = inspect.getattr_static(cls, method_name, None)
+    if method is None:
+        return None
+    # Unwrap descriptors that wrap the underlying function (classmethod,
+    # staticmethod). For an ordinary instance method, the static lookup
+    # already returns the function object.
+    if isinstance(method, (classmethod, staticmethod)):
+        method = method.__func__
+    if not (inspect.isfunction(method) or inspect.ismethod(method)):
+        return None
+    try:
+        source = inspect.getsource(method)
+    except (OSError, TypeError):
+        return None
+    return SymbolMeta(
+        qualname=qualname,
+        kind="method",
+        source=source,
+        docstring=inspect.getdoc(method),
+        module=getattr(method, "__module__", class_meta.module),
         source_sha256=hashlib.sha256(source.encode("utf-8")).hexdigest(),
     )

@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '1341f0b795006a851bea818be61460fa42686205be5853687d3b27ddf17579a7'
 __pnl_qualname__ = 'psyneulink.NormalDist'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_normal_dist'

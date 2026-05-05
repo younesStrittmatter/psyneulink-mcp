@@ -56,10 +56,18 @@ from ...feedback import captured_tool
 _JOURNAL_MARKER_BEGIN = "# psyneulink-mcp:journal"
 _JOURNAL_MARKER_END = "# psyneulink-mcp:end-journal"
 
-# Curated tool names we know how to render as Composition method calls in
-# the exported script. ``run_composition`` is handled separately because
-# it goes under the ``if __name__ == "__main__":`` block.
-_RENDERABLE_CURATED = {"add_node", "add_linear_pathway", "add_projection"}
+# Generated tool names that are *Composition methods* (rather than
+# free-standing constructors). These get rendered as ``comp.<method>(...)``
+# in the exported script — same shape as the legacy curated tools but
+# emitted out of the generated branch instead. The set is hand-maintained
+# alongside ``generator/seeds.txt`` (the ``method:`` directives).
+# ``run_composition`` is curated and handled separately because it goes
+# under the ``if __name__ == "__main__":`` block.
+_RENDERABLE_COMPOSITION_METHODS = {
+    "add_node",
+    "add_projection",
+    "add_linear_processing_pathway",
+}
 
 _DEFAULT_EXPORT_DIR = Path("~/Documents/psyneulink-models").expanduser()
 
@@ -99,9 +107,19 @@ def _utc_stamp() -> str:
 
 
 def _module_stem_for_tool(tool_name: str) -> str:
-    """Map a generated tool's ``TOOL_NAME`` to its on-disk module stem."""
+    """Map a generated tool's ``TOOL_NAME`` to its on-disk module stem.
+
+    Constructor tools (``create_*``) drop the prefix to recover the
+    PNL class snake-case name. Method tools sit in modules named
+    ``<class_snake>_<method_snake>.py`` because methods on different
+    classes can share a name; for the ``Composition.*`` family we ship
+    today, that means ``composition_<method_name>``. The mapping is
+    hand-maintained alongside :data:`_RENDERABLE_COMPOSITION_METHODS`.
+    """
     if tool_name.startswith("create_"):
         return tool_name[len("create_") :]
+    if tool_name in _RENDERABLE_COMPOSITION_METHODS:
+        return f"composition_{tool_name}"
     return tool_name
 
 
@@ -271,15 +289,19 @@ def _render_generated_create(
     return f"{var} = pnl.{cls}({kwargs_src})"
 
 
-def _render_curated_mutation(
+def _render_composition_method(
     entry: handles.JournalEntry, var_map: dict[str, str]
 ) -> str | None:
-    """Render an ``add_*`` curated entry as a ``Composition`` method call.
+    """Render an ``add_*`` Composition-method entry as a method call.
+
+    The journal preserves the exact kwargs the agent passed (including
+    the ``composition`` handle). We reuse them verbatim except for
+    pulling ``composition`` out as the receiver of the call: the
+    rendered shape is ``comp_var.<method>(<other-kwargs>)`` rather than
+    ``add_node(composition=h, node=...)``.
 
     Returns ``None`` for entries we can't render (missing composition
-    handle in the var map, unknown tool, etc.). ``add_projection``
-    expands to two lines: a ``MappingProjection(...)`` construction and
-    the ``comp.add_projection(proj)`` call.
+    handle in the var map, unknown tool, etc.).
     """
     args = entry.args
     comp_handle = args.get("composition")
@@ -287,31 +309,12 @@ def _render_curated_mutation(
         return None
     comp_var = var_map[comp_handle]
     name = entry.tool_name
+    if name not in _RENDERABLE_COMPOSITION_METHODS:
+        return None
 
-    if name == "add_node":
-        node_h = args.get("node")
-        node_src = _render_value(node_h, var_map)
-        return f"{comp_var}.add_node({node_src})"
-
-    if name == "add_linear_pathway":
-        nodes = args.get("nodes") or []
-        nodes_src = _render_value(list(nodes), var_map)
-        return f"{comp_var}.add_linear_processing_pathway({nodes_src})"
-
-    if name == "add_projection":
-        sender_src = _render_value(args.get("sender"), var_map)
-        receiver_src = _render_value(args.get("receiver"), var_map)
-        matrix = args.get("matrix")
-        proj_kwargs = [f"sender={sender_src}", f"receiver={receiver_src}"]
-        if matrix is not None:
-            proj_kwargs.append(f"matrix={_render_value(matrix, var_map)}")
-        proj_var = f"_proj_{comp_var}_{len(var_map)}_{abs(hash(comp_handle)) % 10_000}"
-        return (
-            f"{proj_var} = pnl.MappingProjection({', '.join(proj_kwargs)})\n"
-            f"{comp_var}.add_projection({proj_var})"
-        )
-
-    return None
+    rest = {k: v for k, v in args.items() if k != "composition"}
+    kwargs_src = _render_kwargs(rest, var_map)
+    return f"{comp_var}.{name}({kwargs_src})"
 
 
 def _render_run(
@@ -414,18 +417,18 @@ def _render_script(
 
     for entry in snapshot:
         if entry.tool_layer == "generated":
+            if entry.tool_name in _RENDERABLE_COMPOSITION_METHODS:
+                line = _render_composition_method(entry, var_map)
+                if line is not None:
+                    mutation_lines.append(line)
+                    n_operations += 1
+                continue
             line = _render_generated_create(entry, var_map)
             if line is not None:
                 object_lines.append(line)
                 n_objects += 1
             continue
         if entry.tool_layer == "curated":
-            if entry.tool_name in _RENDERABLE_CURATED:
-                line = _render_curated_mutation(entry, var_map)
-                if line is not None:
-                    mutation_lines.append(line)
-                    n_operations += 1
-                continue
             if entry.tool_name == "run_composition":
                 rendered = _render_run(entry, var_map)
                 if rendered is not None:

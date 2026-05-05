@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '6dd511463825ab750873111bbe9a97bad41947aa3a1231da5c234bbfc7d2405d'
 __pnl_qualname__ = 'psyneulink.RecurrentTransferMechanism'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_recurrent_transfer_mechanism'

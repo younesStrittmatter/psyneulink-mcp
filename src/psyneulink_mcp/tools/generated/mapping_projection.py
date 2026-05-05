@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'd8c007bf89379bd13588392139b4772df8ab11d4616387b02906045f135ac087'
 __pnl_qualname__ = 'psyneulink.MappingProjection'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_mapping_projection'

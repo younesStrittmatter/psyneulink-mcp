@@ -51,6 +51,20 @@ def tools():
     mcp = FakeMCP()
     curated_composition.register(mcp)
     curated_persistence.register(mcp)
+    # Register the migrated generated tools so the integration tests
+    # below can drive a full pipeline via one tool dict.
+    from psyneulink_mcp.tools.generated import (
+        composition_add_linear_processing_pathway as _gen_pathway,
+    )
+    from psyneulink_mcp.tools.generated import (
+        composition_add_node as _gen_add_node,
+    )
+    from psyneulink_mcp.tools.generated import (
+        composition_add_projection as _gen_add_projection,
+    )
+    _gen_add_node.register(mcp)
+    _gen_add_projection.register(mcp)
+    _gen_pathway.register(mcp)
     yield mcp.tools
     handles.clear_handles()
 
@@ -82,8 +96,8 @@ def test_export_writes_runnable_script_with_journal_block(tools, tmp_path):
     h_out = _make_transfer_via_generated("out_node")
     h_comp = _make_composition_via_generated("c")
 
-    tools["add_linear_pathway"](
-        composition=h_comp, nodes=[h_in, h_hidden, h_out]
+    tools["add_linear_processing_pathway"](
+        {"composition": h_comp, "pathway": [h_in, h_hidden, h_out]}
     )
     tools["run_composition"](composition=h_comp, inputs={h_in: [[1.0]]})
 
@@ -116,8 +130,8 @@ def test_journal_block_round_trips_through_json(tools, tmp_path):
     h_a = _make_transfer_via_generated("a")
     h_b = _make_transfer_via_generated("b")
     h_comp = _make_composition_via_generated("rt")
-    tools["add_node"](composition=h_comp, node=h_a)
-    tools["add_node"](composition=h_comp, node=h_b)
+    tools["add_node"]({"composition": h_comp, "node": h_a})
+    tools["add_node"]({"composition": h_comp, "node": h_b})
 
     out_path = tmp_path / "rt.py"
     result = tools["export_python_script"](path=str(out_path))
@@ -146,7 +160,7 @@ def test_exported_script_runs_standalone(tools, tmp_path):
     h_in = _make_transfer_via_generated("standalone_in")
     h_out = _make_transfer_via_generated("standalone_out")
     h_comp = _make_composition_via_generated("standalone_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
     tools["run_composition"](composition=h_comp, inputs={h_in: [[1.0]]})
 
     out_path = tmp_path / "runnable.py"
@@ -196,7 +210,7 @@ def test_dry_run_returns_text_without_writing_file(tools, tmp_path):
     h_in = _make_transfer_via_generated("dry_in")
     h_out = _make_transfer_via_generated("dry_out")
     h_comp = _make_composition_via_generated("dry_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
 
     sentinel_path = tmp_path / "should_not_be_written.py"
 
@@ -237,7 +251,7 @@ def test_dry_run_text_matches_real_export(tools, tmp_path):
     h_in = _make_transfer_via_generated("parity_in")
     h_out = _make_transfer_via_generated("parity_out")
     h_comp = _make_composition_via_generated("parity_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
 
     real = tools["export_python_script"](
         composition=h_comp, path=str(tmp_path / "real.py")
@@ -253,7 +267,7 @@ def test_filter_excludes_unrelated_objects(tools, tmp_path):
     h_in = _make_transfer_via_generated("filtered_in")
     h_out = _make_transfer_via_generated("filtered_out")
     h_comp = _make_composition_via_generated("filtered_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
 
     h_unrelated = _make_transfer_via_generated("unrelated_node")
 

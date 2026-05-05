@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '91c28065491d04d0a3ded52e935feb2bca686842f405b333d1467186486f72cb'
 __pnl_qualname__ = 'psyneulink.Composition'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_composition'

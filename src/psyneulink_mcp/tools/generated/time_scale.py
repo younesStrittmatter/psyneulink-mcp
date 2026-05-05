@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '02398d951fe43f3b1d0a1faf1053ff068a2b8766161a9854a9d7e79f130e8d91'
 __pnl_qualname__ = 'psyneulink.TimeScale'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_time_scale'

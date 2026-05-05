@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'db91912c173d7b4074cc6c8cf7260cb4b6e2ccfc14be9c06447bab46e578974a'
 __pnl_qualname__ = 'psyneulink.convert_to_np_array'
+__pnl_kind__ = 'function'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'convert_to_np_array'

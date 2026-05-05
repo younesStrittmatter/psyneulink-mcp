@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '0addba16e0ce6776d61c74c71c391976d5e10b22286a6dc2ffee5546c7f34506'
 __pnl_qualname__ = 'psyneulink.ObjectiveMechanism'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_objective_mechanism'

@@ -12,6 +12,7 @@ from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '6272239673b3bb6083202e3f9fee4ae09942dc4a63a9358153f2b78075ea5043'
 __pnl_qualname__ = 'psyneulink.TransferMechanism'
+__pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_transfer_mechanism'

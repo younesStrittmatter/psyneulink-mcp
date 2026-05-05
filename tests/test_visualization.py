@@ -24,6 +24,13 @@ import pytest
 from psyneulink_mcp import feedback, handles
 from psyneulink_mcp.tools.curated import composition as curated_composition
 from psyneulink_mcp.tools.curated import visualization as curated_visualization
+from psyneulink_mcp.tools.generated import (
+    composition_add_linear_processing_pathway as gen_pathway,
+)
+from psyneulink_mcp.tools.generated import composition_add_node as gen_add_node
+from psyneulink_mcp.tools.generated import (
+    composition_add_projection as gen_add_projection,
+)
 
 _HAS_DOT = shutil.which("dot") is not None
 _NEEDS_DOT = pytest.mark.skipif(
@@ -80,12 +87,18 @@ def all_curated_tools():
 
     Used by the integration tests that build a real composition through
     the same surface the agent uses, then ask the visualization tools to
-    inspect / render it.
+    inspect / render it. Also registers the *generated* method tools that
+    used to be curated (``add_node``, ``add_projection``,
+    ``add_linear_processing_pathway``) so the integration tests below can
+    drive a full pipeline through one tool dict.
     """
     handles.clear_handles()
     mcp = FakeMCP()
     curated_composition.register(mcp)
     curated_visualization.register(mcp)
+    gen_add_node.register(mcp)
+    gen_add_projection.register(mcp)
+    gen_pathway.register(mcp)
     yield mcp.tools
     handles.clear_handles()
 
@@ -185,14 +198,14 @@ def test_add_node_bumps_composition_revision(all_curated_tools, _pnl):
     h_b = _make_transfer(_pnl, "b")
 
     assert handles.get_revision(h_comp) == 0
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
     assert handles.get_revision(h_comp) == 1
-    all_curated_tools["add_node"](composition=h_comp, node=h_b)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_b})
     assert handles.get_revision(h_comp) == 2
 
 
 @pytest.mark.integration
-def test_add_linear_pathway_bumps_composition_revision(
+def test_add_linear_processing_pathway_bumps_composition_revision(
     all_curated_tools, _pnl
 ):
     h_comp = _make_composition(_pnl)
@@ -200,8 +213,8 @@ def test_add_linear_pathway_bumps_composition_revision(
     h_out = _make_transfer(_pnl, "out_node")
 
     assert handles.get_revision(h_comp) == 0
-    all_curated_tools["add_linear_pathway"](
-        composition=h_comp, nodes=[h_in, h_out]
+    all_curated_tools["add_linear_processing_pathway"](
+        {"composition": h_comp, "pathway": [h_in, h_out]}
     )
     assert handles.get_revision(h_comp) == 1
 
@@ -211,12 +224,17 @@ def test_add_projection_bumps_composition_revision(all_curated_tools, _pnl):
     h_comp = _make_composition(_pnl)
     h_a = _make_transfer(_pnl, "a")
     h_b = _make_transfer(_pnl, "b")
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
-    all_curated_tools["add_node"](composition=h_comp, node=h_b)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_b})
 
     rev_before = handles.get_revision(h_comp)
     all_curated_tools["add_projection"](
-        composition=h_comp, sender=h_a, receiver=h_b, matrix=[[2.0]]
+        {
+            "composition": h_comp,
+            "sender": h_a,
+            "receiver": h_b,
+            "matrix": [[2.0]],
+        }
     )
     assert handles.get_revision(h_comp) == rev_before + 1
 
@@ -226,8 +244,8 @@ def test_run_composition_does_not_bump_revision(all_curated_tools, _pnl):
     h_comp = _make_composition(_pnl)
     h_in = _make_transfer(_pnl, "in_node")
     h_out = _make_transfer(_pnl, "out_node")
-    all_curated_tools["add_linear_pathway"](
-        composition=h_comp, nodes=[h_in, h_out]
+    all_curated_tools["add_linear_processing_pathway"](
+        {"composition": h_comp, "pathway": [h_in, h_out]}
     )
 
     rev_before = handles.get_revision(h_comp)
@@ -250,7 +268,7 @@ def test_get_composition_revision_reports_current_count(
     out0 = all_curated_tools["get_composition_revision"](composition=h_comp)
     assert out0 == {"composition": h_comp, "revision": 0}
 
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
     out1 = all_curated_tools["get_composition_revision"](composition=h_comp)
     assert out1 == {"composition": h_comp, "revision": 1}
 
@@ -274,7 +292,7 @@ def test_render_composition_graph_png_returns_data_url(
 ):
     h_comp = _make_composition(_pnl)
     h_a = _make_transfer(_pnl, "png_a")
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
 
     out = all_curated_tools["render_composition_graph"](
         composition=h_comp, fmt="png"
@@ -298,7 +316,7 @@ def test_render_composition_graph_svg_returns_xml_data_url(
 ):
     h_comp = _make_composition(_pnl)
     h_a = _make_transfer(_pnl, "svg_a")
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
 
     out = all_curated_tools["render_composition_graph"](
         composition=h_comp, fmt="svg"
@@ -317,7 +335,7 @@ def test_render_composition_graph_dot_returns_dot_source(
     runs even on machines without graphviz installed."""
     h_comp = _make_composition(_pnl)
     h_a = _make_transfer(_pnl, "dot_a")
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
 
     out = all_curated_tools["render_composition_graph"](
         composition=h_comp, fmt="dot"
@@ -374,7 +392,7 @@ def test_render_composition_graph_raises_runtime_error_when_dot_missing(
     """
     h_comp = _make_composition(_pnl)
     h_a = _make_transfer(_pnl, "missing_dot")
-    all_curated_tools["add_node"](composition=h_comp, node=h_a)
+    all_curated_tools["add_node"]({"composition": h_comp, "node": h_a})
 
     def _boom(self, *args, **kwargs):  # noqa: ARG001
         raise _gv.ExecutableNotFound(["dot"])

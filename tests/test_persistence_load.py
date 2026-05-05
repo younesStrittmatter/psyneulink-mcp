@@ -50,6 +50,14 @@ def tools():
     mcp = FakeMCP()
     curated_composition.register(mcp)
     curated_persistence.register(mcp)
+    from psyneulink_mcp.tools.generated import (
+        composition_add_linear_processing_pathway as _gen_pathway,
+    )
+    from psyneulink_mcp.tools.generated import (
+        composition_add_node as _gen_add_node,
+    )
+    _gen_add_node.register(mcp)
+    _gen_pathway.register(mcp)
     yield mcp.tools
     handles.clear_handles()
 
@@ -79,8 +87,8 @@ def test_replay_mode_rebuilds_objects_from_journal(tools, tmp_path):
     h_hidden = _make_transfer_via_generated("replay_hidden")
     h_out = _make_transfer_via_generated("replay_out")
     h_comp = _make_composition_via_generated("replay_comp")
-    tools["add_linear_pathway"](
-        composition=h_comp, nodes=[h_in, h_hidden, h_out]
+    tools["add_linear_processing_pathway"](
+        {"composition": h_comp, "pathway": [h_in, h_hidden, h_out]}
     )
 
     out_path = tmp_path / "model.py"
@@ -149,7 +157,7 @@ def test_replay_skips_run_composition(tools, tmp_path):
     h_in = _make_transfer_via_generated("noexec_in")
     h_out = _make_transfer_via_generated("noexec_out")
     h_comp = _make_composition_via_generated("noexec_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
     tools["run_composition"](composition=h_comp, inputs={h_in: [[1.0]]})
 
     out_path = tmp_path / "noexec.py"
@@ -221,7 +229,7 @@ def test_replay_handles_filtered_export(tools, tmp_path):
     h_in = _make_transfer_via_generated("filt_in")
     h_out = _make_transfer_via_generated("filt_out")
     h_comp = _make_composition_via_generated("filt_comp")
-    tools["add_linear_pathway"](composition=h_comp, nodes=[h_in, h_out])
+    tools["add_linear_processing_pathway"]({"composition": h_comp, "pathway": [h_in, h_out]})
     # Add an unrelated mechanism that should NOT appear in the filtered export.
     _make_transfer_via_generated("filt_unrelated")
 
