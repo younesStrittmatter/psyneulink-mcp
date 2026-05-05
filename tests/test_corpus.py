@@ -310,6 +310,121 @@ def test_fetch_pending_feedback_issues_filters_consumed(
 
 
 # --------------------------------------------------------------------------- #
+# find_existing_feedback_issue / open_feedback_issue                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_find_existing_feedback_issue_returns_number_on_exact_title_match(
+    monkeypatch, fake_corpus_env
+) -> None:
+    title = "[auto] my_tool: ValueError: bad x=42"
+    issues = [
+        {"number": 7, "title": "different title"},
+        {"number": 8, "title": title},
+    ]
+    captured: dict[str, Any] = {}
+
+    def fake_run(args, **_kw):
+        captured["args"] = list(args)
+        return _completed(stdout=json.dumps(issues))
+
+    monkeypatch.setattr(corpus.subprocess, "run", fake_run)
+
+    assert corpus.find_existing_feedback_issue(title) == 8
+    # Must scope by both labels; otherwise we'd hit human-filed issues too.
+    assert "feedback" in captured["args"]
+    assert "auto" in captured["args"]
+    assert any(arg.startswith("in:title") for arg in captured["args"])
+
+
+def test_find_existing_feedback_issue_returns_none_when_no_match(
+    monkeypatch, fake_corpus_env
+) -> None:
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stdout="[]"),
+    )
+    assert corpus.find_existing_feedback_issue("[auto] x: Y: z") is None
+
+
+def test_find_existing_feedback_issue_ignores_partial_title_matches(
+    monkeypatch, fake_corpus_env
+) -> None:
+    """`gh search` may return broader matches; we require an exact equal."""
+    title = "[auto] my_tool: ValueError: bad x=42"
+    issues = [{"number": 9, "title": title + " (and more)"}]
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stdout=json.dumps(issues)),
+    )
+    assert corpus.find_existing_feedback_issue(title) is None
+
+
+def test_find_existing_feedback_issue_raises_on_gh_failure(
+    monkeypatch, fake_corpus_env
+) -> None:
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stderr="HTTP 500", returncode=1),
+    )
+    with pytest.raises(corpus.CorpusUnavailable):
+        corpus.find_existing_feedback_issue("anything")
+
+
+def test_open_feedback_issue_invokes_gh_with_default_labels(
+    monkeypatch, fake_corpus_env
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run(args, **_kw):
+        captured["args"] = list(args)
+        return _completed(
+            stdout="https://github.com/test-owner/test-corpus/issues/99\n"
+        )
+
+    monkeypatch.setattr(corpus.subprocess, "run", fake_run)
+
+    url = corpus.open_feedback_issue(title="t", body="b")
+
+    assert url == "https://github.com/test-owner/test-corpus/issues/99"
+    assert "create" in captured["args"]
+    assert "--title" in captured["args"]
+    assert "t" in captured["args"]
+    # Default labels: feedback,auto, comma-joined for `gh issue create`.
+    assert "--label" in captured["args"]
+    assert "feedback,auto" in captured["args"]
+
+
+def test_open_feedback_issue_honours_explicit_label_list(
+    monkeypatch, fake_corpus_env
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run(args, **_kw):
+        captured["args"] = list(args)
+        return _completed(stdout="https://example/issues/1")
+
+    monkeypatch.setattr(corpus.subprocess, "run", fake_run)
+    corpus.open_feedback_issue(title="t", body="b", labels=["alpha", "beta"])
+    assert "alpha,beta" in captured["args"]
+
+
+def test_open_feedback_issue_raises_on_gh_failure(
+    monkeypatch, fake_corpus_env
+) -> None:
+    monkeypatch.setattr(
+        corpus.subprocess,
+        "run",
+        lambda *_a, **_kw: _completed(stderr="HTTP 422", returncode=1),
+    )
+    with pytest.raises(corpus.CorpusUnavailable):
+        corpus.open_feedback_issue(title="t", body="b")
+
+
+# --------------------------------------------------------------------------- #
 # mark_issues_consumed                                                        #
 # --------------------------------------------------------------------------- #
 

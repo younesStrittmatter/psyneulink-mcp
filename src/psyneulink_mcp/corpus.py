@@ -38,6 +38,7 @@ BRAINLIKE_DIR = "community/brainlike"
 SCHEMA_FILENAME = "_schema.yaml"
 FEEDBACK_LABEL = "feedback"
 CONSUMED_LABEL = "consumed"
+AUTO_LABEL = "auto"
 
 CACHE_TTL_SECONDS = 60 * 60  # 1 hour
 
@@ -327,6 +328,98 @@ def fetch_pending_feedback_issues() -> list[dict[str, Any]]:
             continue  # already pulled into a previous regen
         envelopes.append(_issue_to_envelope(issue))
     return envelopes
+
+
+# --------------------------------------------------------------------------- #
+# auto-issue write path (server-side, runtime captures)                       #
+# --------------------------------------------------------------------------- #
+#
+# These two helpers are the *only* server-side writes into the corpus repo,
+# and they exist solely so that runtime-captured tool failures surface as
+# GitHub issues alongside the local JSONL. The polyrepo rule still holds:
+# the MCP only calls `gh` against the corpus, never edits its checked-in
+# files. See `feedback_publisher.py` for the fire-and-forget caller and the
+# dedup story; see `CLAUDE.md §Feedback loop` for how these issues feed the
+# next regen.
+
+
+def find_existing_feedback_issue(title: str) -> int | None:
+    """Return the issue number of an open `feedback,auto` issue with this
+    exact title, or `None` if no match.
+
+    The publisher uses this for cross-process dedup: a failure that already
+    has an open issue (perhaps filed by a previous MCP process or from
+    another developer's machine) should not produce a duplicate. Title
+    equality is the join key — keep titles deterministic at the call site.
+
+    Raises `CorpusUnavailable` if `gh` is missing, unauthenticated, or the
+    request fails. Callers that must never raise (the publisher) wrap this.
+    """
+    repo = corpus_repo()
+    result = _run_gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--label",
+            FEEDBACK_LABEL,
+            "--label",
+            AUTO_LABEL,
+            "--state",
+            "open",
+            "--search",
+            f'in:title "{title}"',
+            "--json",
+            "number,title",
+            "--limit",
+            "30",
+        ]
+    )
+    try:
+        issues = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as e:
+        raise CorpusUnavailable(
+            f"Could not parse `gh issue list` output: {e}"
+        ) from e
+    for issue in issues:
+        if issue.get("title") == title:
+            number = issue.get("number")
+            if isinstance(number, int):
+                return number
+    return None
+
+
+def open_feedback_issue(
+    *,
+    title: str,
+    body: str,
+    labels: list[str] | None = None,
+) -> str:
+    """Create a new feedback issue on the corpus repo. Returns the new
+    issue's URL (whatever `gh issue create` prints to stdout).
+
+    `labels` defaults to `[FEEDBACK_LABEL, AUTO_LABEL]` so the issue is
+    pulled by the regen consumer (`feedback`) and clearly tagged as a
+    runtime auto-capture (`auto`) rather than a human report. Raises
+    `CorpusUnavailable` on any `gh` failure; the publisher swallows.
+    """
+    repo = corpus_repo()
+    use_labels = labels if labels is not None else [FEEDBACK_LABEL, AUTO_LABEL]
+    args = [
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body",
+        body,
+    ]
+    if use_labels:
+        args.extend(["--label", ",".join(use_labels)])
+    result = _run_gh(args)
+    return (result.stdout or "").strip()
 
 
 # --------------------------------------------------------------------------- #

@@ -89,24 +89,45 @@ def log_runtime_error(
     args: dict[str, Any],
     exc: BaseException,
 ) -> None:
-    _write_entry(
-        {
-            "timestamp": _now_iso(),
-            "source": "auto",
-            "tool_name": tool_name,
-            "tool_layer": tool_layer,
-            "pnl_version": _pnl_version(),
-            "server_version": _server_version,
-            "payload": {
-                "args": args,
-                "exception_type": type(exc).__name__,
-                "exception_message": str(exc),
-                "traceback": "".join(
-                    _tb.format_exception(type(exc), exc, exc.__traceback__)
-                ),
-            },
-        }
-    )
+    entry: dict[str, Any] = {
+        "timestamp": _now_iso(),
+        "source": "auto",
+        "tool_name": tool_name,
+        "tool_layer": tool_layer,
+        "pnl_version": _pnl_version(),
+        "server_version": _server_version,
+        "payload": {
+            "args": args,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "traceback": "".join(
+                _tb.format_exception(type(exc), exc, exc.__traceback__)
+            ),
+        },
+    }
+    _write_entry(entry)
+    _publish_runtime_error(entry)
+
+
+def _publish_runtime_error(entry: dict[str, Any]) -> None:
+    """Best-effort GitHub-issue mirror of the JSONL write.
+
+    The local JSONL is the source of truth for the regen pipeline; this is
+    an *additional* surface so failures show up across machines. Imported
+    lazily so a broken/missing `feedback_publisher` can't break logging,
+    and wrapped to swallow every exception (the runtime path must never
+    raise from here).
+    """
+    try:
+        from . import feedback_publisher
+
+        feedback_publisher.try_file(entry)
+    except Exception as e:  # noqa: BLE001
+        with contextlib.suppress(Exception):
+            print(
+                f"[psyneulink-mcp] feedback publish dispatch failed: {e!r}",
+                file=sys.stderr,
+            )
 
 
 def log_agent_report(
