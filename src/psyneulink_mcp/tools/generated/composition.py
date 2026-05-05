@@ -10,133 +10,137 @@ import psyneulink as pnl
 from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
-__source_sha256__ = '91c28065491d04d0a3ded52e935feb2bca686842f405b333d1467186486f72cb'
+__source_sha256__ = '82e486b9b09ff0cde5e71602e6f5b2d26ee05fc304b26675dbbf2c8dd497f0cd'
 __pnl_qualname__ = 'psyneulink.Composition'
 __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_composition'
-TOOL_DESCRIPTION = 'Call this tool to construct a PsyNeuLink `Composition` — the top-level executable container that wires Mechanisms and Projections into a runnable computational graph. Use it after creating component Mechanisms (e.g., via `transfer_mechanism`, `processing_mechanism`) when you need to assemble them into a network that can be executed with `.run()` or `.learn()`. The tool returns a Composition object whose `output_values` and `results` attributes hold trial-by-trial outputs.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "allow_probes": {\n      "default": true,\n      "description": "If true (default), allows Mechanisms with NodeRole.PROBE to exist in the Composition without raising an error.",\n      "type": "boolean"\n    },\n    "controller": {\n      "description": "An OptimizationControlMechanism (e.g. EVCControlMechanism, OCM) that modulates parameters of the Composition. Omit unless you need adaptive control. When provided, enable_controller is automatically set to True.",\n      "type": "object"\n    },\n    "controller_mode": {\n      "default": "after",\n      "description": "When the controller executes relative to the rest of the Composition each trial. \\"before\\" runs controller before other Mechanisms; \\"after\\" (default) runs it after.",\n      "enum": [\n        "before",\n        "after"\n      ],\n      "type": "string"\n    },\n    "controller_time_scale": {\n      "default": "TRIAL",\n      "description": "Time scale at which the controller executes. Default: \\"TRIAL\\" (once per trial).",\n      "enum": [\n        "TIME_STEP",\n        "PASS",\n        "TRIAL",\n        "RUN"\n      ],\n      "type": "string"\n    },\n    "enable_controller": {\n      "description": "Explicitly enable or disable the controller. Automatically set to True when a controller is provided. Set to False to temporarily disable a controller without removing it.",\n      "type": "boolean"\n    },\n    "enable_learning": {\n      "default": true,\n      "description": "If true (default), learning pathways defined via pathways are activated when .learn() is called. Set to False to disable all learning even if learning pathways are present.",\n      "type": "boolean"\n    },\n    "include_probes_in_output": {\n      "default": false,\n      "description": "If true, Mechanisms with NodeRole.PROBE are included in output_values and results. Always forced True for nested (inner) Compositions.",\n      "type": "boolean"\n    },\n    "learning_rate": {\n      "default": 0.05,\n      "description": "Global learning rate applied to all LearningMechanisms in the Composition. Default: 0.05. Individual LearningProjections may override this.",\n      "type": "number"\n    },\n    "minibatch_size": {\n      "default": 1,\n      "description": "Number of trials per minibatch during .learn(). Default: 1 (online learning). Values > 1 produce minibatch gradient accumulation.",\n      "minimum": 1,\n      "type": "integer"\n    },\n    "name": {\n      "description": "Optional name for this Composition. Defaults to \'Composition-N\'.",\n      "type": "string"\n    },\n    "nodes": {\n      "description": "Additional Mechanisms or Compositions to add as singleton nodes (no auto-created Projections). Use when you want to add nodes that will be connected via explicit projections.",\n      "items": {},\n      "type": "array"\n    },\n    "optimizations_per_minibatch": {\n      "default": 1,\n      "description": "Number of weight-update steps taken per minibatch. Default: 1.",\n      "minimum": 1,\n      "type": "integer"\n    },\n    "pathways": {\n      "description": "Primary way to add Nodes and connections. A flat list [MechA, MechB, ...] creates a linear chain with auto-created MappingProjections. A tuple (pathway_list, LearningFunction) creates a learning pathway. A set at any position creates parallel non-connected nodes.",\n      "items": {},\n      "type": "array"\n    },\n    "projections": {\n      "description": "Additional Projections to add beyond those auto-created by pathways.",\n      "items": {},\n      "type": "array"\n    },\n    "retain_old_simulation_data": {\n      "default": false,\n      "description": "If true, simulation results from controller simulations are retained in simulation_results. Default: false (cleared each trial) to save memory.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- `pathways` is the recommended entry point: a flat list `[MechA, MechB, MechC]` automatically inserts MappingProjections between adjacent mechanisms.\n- `learning_rate` default is 0.05 (from the Parameters inner class), not None as the constructor signature implies.\n- `controller_mode` takes lowercase strings "before" or "after" — do not use PNL keyword constants BEFORE/AFTER.\n- `enable_controller` is automatically set True when a controller is provided; you rarely need to set it explicitly.\n- For nested (inner) Compositions, `include_probes_in_output` is always forced True regardless of the argument.\n- A `set` of Mechanisms at a position in a pathways list creates parallel (non-connected) nodes at that point; doubly-nested lists beyond a single level of nesting cause errors.\n- `pathways`, `nodes`, and `projections` accept live PNL Python objects — they cannot be serialized to JSON. Pass the Python objects returned by other create_* tools.\n- `controller_condition` and `prefs` are omitted from this schema because they require live PNL objects; use `report_tool_issue` if you need them.\n- `show_graph_attributes` is omitted; it only affects visualization, not execution.'
+TOOL_DESCRIPTION = 'Call this tool to instantiate a PsyNeuLink Composition — the top-level container that wires together Mechanisms and Projections into an executable cognitive/neural model. Use it when you need a new empty or pre-populated Composition; the result is the Composition object itself, which can subsequently be run via `.run()` or trained via `.learn()`. Specify structure upfront via `pathways` (most common), `nodes`, and/or `projections`, or build incrementally after construction with `add_node`/`add_linear_processing_pathway`.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "allow_probes": {\n      "default": true,\n      "description": "Whether OUTPUT nodes of nested Compositions may be used as probes (intermediate value monitors) by outer Compositions. Pass \'CONTROL\' string to delegate control to the controller.",\n      "type": "boolean"\n    },\n    "controller": {\n      "description": "Python object reference (OptimizationControlMechanism or subclass) that controls parameter values. Pass as a pre-constructed Python object; this field accepts a string name/handle. Required if enable_controller=True.",\n      "type": "string"\n    },\n    "controller_mode": {\n      "default": "after",\n      "description": "Whether controller executes before or after the Composition\'s processing nodes each trial.",\n      "enum": [\n        "before",\n        "after"\n      ],\n      "type": "string"\n    },\n    "controller_time_scale": {\n      "default": "TRIAL",\n      "description": "TimeScale granularity at which the controller is invoked.",\n      "enum": [\n        "TIME_STEP",\n        "PASS",\n        "TRIAL",\n        "RUN"\n      ],\n      "type": "string"\n    },\n    "enable_controller": {\n      "description": "Explicitly enable or disable the controller. If omitted, controller is enabled automatically when one is assigned.",\n      "type": "boolean"\n    },\n    "enable_learning": {\n      "default": true,\n      "description": "Whether learning is enabled globally. Does not add learning components; they must be added separately or via AutodiffComposition.",\n      "type": "boolean"\n    },\n    "include_probes_in_output": {\n      "default": false,\n      "description": "Whether probe values are included in the Composition\'s output. Automatically set to True when nested Compositions are present.",\n      "type": "boolean"\n    },\n    "learning_rate": {\n      "description": "Global learning rate. True default is 0.05 (constructor signature shows None but Parameters class sets 0.05). Overrides per-LearningMechanism rates unless a dict is provided.",\n      "oneOf": [\n        {\n          "minimum": 0,\n          "type": "number"\n        },\n        {\n          "description": "Dict mapping learning components to individual rates.",\n          "type": "object"\n        }\n      ]\n    },\n    "minibatch_size": {\n      "default": 1,\n      "description": "Number of trials per minibatch for learning. Only relevant when learning is enabled.",\n      "minimum": 1,\n      "type": "integer"\n    },\n    "name": {\n      "description": "Name for the Composition. Auto-generated if omitted (e.g., \'Composition-0\').",\n      "type": "string"\n    },\n    "nodes": {\n      "description": "Mechanisms or nested Compositions to add as SINGLETON nodes (no automatic projections). Use when not specifying full pathways.",\n      "type": "array"\n    },\n    "optimizations_per_minibatch": {\n      "default": 1,\n      "description": "Number of weight-update passes per minibatch. Only relevant when learning is enabled.",\n      "minimum": 1,\n      "type": "integer"\n    },\n    "pathways": {\n      "description": "One or more processing pathways. Flat list = single pathway; list of lists = parallel pathways. Each pathway element may be a Mechanism, Projection, or (node, projection, node) tuple. Sets at a position create parallel branches that merge downstream.",\n      "type": "array"\n    },\n    "projections": {\n      "description": "MappingProjection objects to add explicitly. Usually inferred from pathways; specify here only when adding projections outside a pathway.",\n      "type": "array"\n    },\n    "retain_old_simulation_data": {\n      "default": false,\n      "description": "Whether simulation data from controller evaluation trials is retained after each trial. Set True for debugging; False (default) discards simulation results to save memory.",\n      "type": "boolean"\n    },\n    "show_graph_attributes": {\n      "description": "Dict of display attributes passed to show_graph(). Controls visual rendering only; no effect on execution.",\n      "type": "object"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- `learning_rate` true operative default is **0.05**, not None — the constructor signature is misleading; the `Parameters` inner class sets `Parameter(.05)`.\n- `pathways` parsing rules are non-obvious: a flat list is treated as a **single** pathway (elements are nodes/projections in sequence); a list of lists creates **parallel** pathways; doubly-nested lists collapse into a single pathway; triply-nested raises an error.\n- `nodes` adds each element as a **SINGLETON** — no projections are created automatically. Mix with `pathways` only if you know what roles will be assigned.\n- `controller` must be a Python object (OptimizationControlMechanism or subclass), not a string literal. JSON Schema cannot represent object references; the string type here is a proxy — pass the actual Python handle at call time.\n- Nested Compositions as nodes force `include_probes_in_output=True` automatically regardless of the kwarg.\n- `allow_probes` also accepts the string `\'CONTROL\'` to delegate probe authorization to the controller; the boolean schema is a simplification.\n- Adding nodes or projections after construction (via `add_node`, `add_projection`, `add_linear_processing_pathway`) triggers a full graph re-analysis — roles, INPUT/OUTPUT designation, and learning components are reassigned.\n- `termination_processing` (dict mapping TimeScale → Condition) is available as an extra kwarg via `**param_defaults` and is commonly needed for custom stopping criteria; it does not appear in the schema above.'
 TOOL_PARAMETERS = { 'properties': { 'allow_probes': { 'default': True,
-                                    'description': 'If true (default), allows '
-                                                   'Mechanisms with NodeRole.PROBE to '
-                                                   'exist in the Composition without '
-                                                   'raising an error.',
+                                    'description': 'Whether OUTPUT nodes of nested '
+                                                   'Compositions may be used as probes '
+                                                   '(intermediate value monitors) by '
+                                                   "outer Compositions. Pass 'CONTROL' "
+                                                   'string to delegate control to the '
+                                                   'controller.',
                                     'type': 'boolean'},
-                  'controller': { 'description': 'An OptimizationControlMechanism '
-                                                 '(e.g. EVCControlMechanism, OCM) that '
-                                                 'modulates parameters of the '
-                                                 'Composition. Omit unless you need '
-                                                 'adaptive control. When provided, '
-                                                 'enable_controller is automatically '
-                                                 'set to True.',
-                                  'type': 'object'},
+                  'controller': { 'description': 'Python object reference '
+                                                 '(OptimizationControlMechanism or '
+                                                 'subclass) that controls parameter '
+                                                 'values. Pass as a pre-constructed '
+                                                 'Python object; this field accepts a '
+                                                 'string name/handle. Required if '
+                                                 'enable_controller=True.',
+                                  'type': 'string'},
                   'controller_mode': { 'default': 'after',
-                                       'description': 'When the controller executes '
-                                                      'relative to the rest of the '
-                                                      'Composition each trial. '
-                                                      '"before" runs controller before '
-                                                      'other Mechanisms; "after" '
-                                                      '(default) runs it after.',
+                                       'description': 'Whether controller executes '
+                                                      'before or after the '
+                                                      "Composition's processing nodes "
+                                                      'each trial.',
                                        'enum': ['before', 'after'],
                                        'type': 'string'},
                   'controller_time_scale': { 'default': 'TRIAL',
-                                             'description': 'Time scale at which the '
-                                                            'controller executes. '
-                                                            'Default: "TRIAL" (once '
-                                                            'per trial).',
+                                             'description': 'TimeScale granularity at '
+                                                            'which the controller is '
+                                                            'invoked.',
                                              'enum': [ 'TIME_STEP',
                                                        'PASS',
                                                        'TRIAL',
                                                        'RUN'],
                                              'type': 'string'},
                   'enable_controller': { 'description': 'Explicitly enable or disable '
-                                                        'the controller. Automatically '
-                                                        'set to True when a controller '
-                                                        'is provided. Set to False to '
-                                                        'temporarily disable a '
-                                                        'controller without removing '
-                                                        'it.',
+                                                        'the controller. If omitted, '
+                                                        'controller is enabled '
+                                                        'automatically when one is '
+                                                        'assigned.',
                                          'type': 'boolean'},
                   'enable_learning': { 'default': True,
-                                       'description': 'If true (default), learning '
-                                                      'pathways defined via pathways '
-                                                      'are activated when .learn() is '
-                                                      'called. Set to False to disable '
-                                                      'all learning even if learning '
-                                                      'pathways are present.',
+                                       'description': 'Whether learning is enabled '
+                                                      'globally. Does not add learning '
+                                                      'components; they must be added '
+                                                      'separately or via '
+                                                      'AutodiffComposition.',
                                        'type': 'boolean'},
                   'include_probes_in_output': { 'default': False,
-                                                'description': 'If true, Mechanisms '
-                                                               'with NodeRole.PROBE '
-                                                               'are included in '
-                                                               'output_values and '
-                                                               'results. Always forced '
-                                                               'True for nested '
-                                                               '(inner) Compositions.',
+                                                'description': 'Whether probe values '
+                                                               'are included in the '
+                                                               "Composition's output. "
+                                                               'Automatically set to '
+                                                               'True when nested '
+                                                               'Compositions are '
+                                                               'present.',
                                                 'type': 'boolean'},
-                  'learning_rate': { 'default': 0.05,
-                                     'description': 'Global learning rate applied to '
-                                                    'all LearningMechanisms in the '
-                                                    'Composition. Default: 0.05. '
-                                                    'Individual LearningProjections '
-                                                    'may override this.',
-                                     'type': 'number'},
+                  'learning_rate': { 'description': 'Global learning rate. True '
+                                                    'default is 0.05 (constructor '
+                                                    'signature shows None but '
+                                                    'Parameters class sets 0.05). '
+                                                    'Overrides per-LearningMechanism '
+                                                    'rates unless a dict is provided.',
+                                     'oneOf': [ {'minimum': 0, 'type': 'number'},
+                                                { 'description': 'Dict mapping '
+                                                                 'learning components '
+                                                                 'to individual rates.',
+                                                  'type': 'object'}]},
                   'minibatch_size': { 'default': 1,
                                       'description': 'Number of trials per minibatch '
-                                                     'during .learn(). Default: 1 '
-                                                     '(online learning). Values > 1 '
-                                                     'produce minibatch gradient '
-                                                     'accumulation.',
+                                                     'for learning. Only relevant when '
+                                                     'learning is enabled.',
                                       'minimum': 1,
                                       'type': 'integer'},
-                  'name': { 'description': 'Optional name for this Composition. '
-                                           "Defaults to 'Composition-N'.",
+                  'name': { 'description': 'Name for the Composition. Auto-generated '
+                                           "if omitted (e.g., 'Composition-0').",
                             'type': 'string'},
-                  'nodes': { 'description': 'Additional Mechanisms or Compositions to '
-                                            'add as singleton nodes (no auto-created '
-                                            'Projections). Use when you want to add '
-                                            'nodes that will be connected via explicit '
-                                            'projections.',
-                             'items': {},
+                  'nodes': { 'description': 'Mechanisms or nested Compositions to add '
+                                            'as SINGLETON nodes (no automatic '
+                                            'projections). Use when not specifying '
+                                            'full pathways.',
                              'type': 'array'},
                   'optimizations_per_minibatch': { 'default': 1,
                                                    'description': 'Number of '
-                                                                  'weight-update steps '
-                                                                  'taken per '
-                                                                  'minibatch. Default: '
-                                                                  '1.',
+                                                                  'weight-update '
+                                                                  'passes per '
+                                                                  'minibatch. Only '
+                                                                  'relevant when '
+                                                                  'learning is '
+                                                                  'enabled.',
                                                    'minimum': 1,
                                                    'type': 'integer'},
-                  'pathways': { 'description': 'Primary way to add Nodes and '
-                                               'connections. A flat list [MechA, '
-                                               'MechB, ...] creates a linear chain '
-                                               'with auto-created MappingProjections. '
-                                               'A tuple (pathway_list, '
-                                               'LearningFunction) creates a learning '
-                                               'pathway. A set at any position creates '
-                                               'parallel non-connected nodes.',
-                                'items': {},
+                  'pathways': { 'description': 'One or more processing pathways. Flat '
+                                               'list = single pathway; list of lists = '
+                                               'parallel pathways. Each pathway '
+                                               'element may be a Mechanism, '
+                                               'Projection, or (node, projection, '
+                                               'node) tuple. Sets at a position create '
+                                               'parallel branches that merge '
+                                               'downstream.',
                                 'type': 'array'},
-                  'projections': { 'description': 'Additional Projections to add '
-                                                  'beyond those auto-created by '
-                                                  'pathways.',
-                                   'items': {},
+                  'projections': { 'description': 'MappingProjection objects to add '
+                                                  'explicitly. Usually inferred from '
+                                                  'pathways; specify here only when '
+                                                  'adding projections outside a '
+                                                  'pathway.',
                                    'type': 'array'},
                   'retain_old_simulation_data': { 'default': False,
-                                                  'description': 'If true, simulation '
-                                                                 'results from '
-                                                                 'controller '
-                                                                 'simulations are '
-                                                                 'retained in '
-                                                                 'simulation_results. '
-                                                                 'Default: false '
-                                                                 '(cleared each trial) '
+                                                  'description': 'Whether simulation '
+                                                                 'data from controller '
+                                                                 'evaluation trials is '
+                                                                 'retained after each '
+                                                                 'trial. Set True for '
+                                                                 'debugging; False '
+                                                                 '(default) discards '
+                                                                 'simulation results '
                                                                  'to save memory.',
-                                                  'type': 'boolean'}},
+                                                  'type': 'boolean'},
+                  'show_graph_attributes': { 'description': 'Dict of display '
+                                                            'attributes passed to '
+                                                            'show_graph(). Controls '
+                                                            'visual rendering only; no '
+                                                            'effect on execution.',
+                                             'type': 'object'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = '- `pathways` is the recommended entry point: a flat list `[MechA, MechB, MechC]` automatically inserts MappingProjections between adjacent mechanisms.\n- `learning_rate` default is 0.05 (from the Parameters inner class), not None as the constructor signature implies.\n- `controller_mode` takes lowercase strings "before" or "after" — do not use PNL keyword constants BEFORE/AFTER.\n- `enable_controller` is automatically set True when a controller is provided; you rarely need to set it explicitly.\n- For nested (inner) Compositions, `include_probes_in_output` is always forced True regardless of the argument.\n- A `set` of Mechanisms at a position in a pathways list creates parallel (non-connected) nodes at that point; doubly-nested lists beyond a single level of nesting cause errors.\n- `pathways`, `nodes`, and `projections` accept live PNL Python objects — they cannot be serialized to JSON. Pass the Python objects returned by other create_* tools.\n- `controller_condition` and `prefs` are omitted from this schema because they require live PNL objects; use `report_tool_issue` if you need them.\n- `show_graph_attributes` is omitted; it only affects visualization, not execution.'
+TOOL_NOTES = "- `learning_rate` true operative default is **0.05**, not None — the constructor signature is misleading; the `Parameters` inner class sets `Parameter(.05)`.\n- `pathways` parsing rules are non-obvious: a flat list is treated as a **single** pathway (elements are nodes/projections in sequence); a list of lists creates **parallel** pathways; doubly-nested lists collapse into a single pathway; triply-nested raises an error.\n- `nodes` adds each element as a **SINGLETON** — no projections are created automatically. Mix with `pathways` only if you know what roles will be assigned.\n- `controller` must be a Python object (OptimizationControlMechanism or subclass), not a string literal. JSON Schema cannot represent object references; the string type here is a proxy — pass the actual Python handle at call time.\n- Nested Compositions as nodes force `include_probes_in_output=True` automatically regardless of the kwarg.\n- `allow_probes` also accepts the string `'CONTROL'` to delegate probe authorization to the controller; the boolean schema is a simplification.\n- Adding nodes or projections after construction (via `add_node`, `add_projection`, `add_linear_processing_pathway`) triggers a full graph re-analysis — roles, INPUT/OUTPUT designation, and learning components are reassigned.\n- `termination_processing` (dict mapping TimeScale → Condition) is available as an extra kwarg via `**param_defaults` and is commonly needed for custom stopping criteria; it does not appear in the schema above."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -161,5 +165,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_composition(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to construct a PsyNeuLink `Composition` — the top-level executable container that wires Mechanisms and Projections into a runnable computational graph.'
+        'Call this tool to instantiate a PsyNeuLink Composition — the top-level container that wires together Mechanisms and Projections into an executable cognitive/neural model.'
         return _impl(args or {})

@@ -11,58 +11,73 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 from psyneulink_mcp import method_helpers
 
-__source_sha256__ = '5cb76dab7edb156a6b9dfc7c43c5733932d7154f14247cccccf19c1cc5246e38'
+__source_sha256__ = 'c6d5a410ed9b1d8c352ba2eeb40e1b0a04ab33bd5ff406c45c5fdefb884891e3'
 __pnl_qualname__ = 'psyneulink.Composition.add_linear_processing_pathway'
 __pnl_kind__ = 'method'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'add_linear_processing_pathway'
-TOOL_DESCRIPTION = 'Call this tool after creating a Composition to wire a feed-forward chain of nodes into it. Pass an ordered list of node handle strings — the tool auto-creates MappingProjections between consecutive pairs and returns the resulting Pathway. Use this (not add_node repeated calls) whenever you want a linear processing pipeline; use add_linear_learning_pathway instead if you need trainable weights.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string of the target Composition, as returned by create_composition.",\n      "type": "string"\n    },\n    "default_projection_matrix": {\n      "description": "Optional matrix spec (e.g. \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\') or a numeric matrix expressed as a JSON-encoded 2-D array string to use for any auto-created MappingProjection whose matrix was not explicitly specified. Overrides the MappingProjection default. Omit to use PsyNeuLink defaults.",\n      "type": "string"\n    },\n    "name": {\n      "description": "Optional name for the returned Pathway object. Overrides any name carried by a Pathway object passed as pathway.",\n      "type": "string"\n    },\n    "pathway": {\n      "description": "Ordered sequence of node handles (strings) defining the feed-forward chain. Elements are node handle strings or, when explicit projection control is needed, alternating node / projection specs. Auto-created MappingProjections connect each consecutive pair when no explicit projection is interleaved.",\n      "items": {\n        "description": "Handle string of a node (Mechanism or nested Composition) already registered in the server, or a special projection keyword between two node entries.",\n        "type": "string"\n      },\n      "minItems": 1,\n      "type": "array"\n    }\n  },\n  "required": [\n    "composition",\n    "pathway"\n  ],\n  "type": "object"\n}\n\nNotes:\n- If the exact same pathway (nodes + projections) already exists in the Composition, the existing Pathway is returned with a warning rather than a duplicate being created.\n- ControlMechanisms that have monitor_for_control set, and ObjectiveMechanisms that project to a ControlMechanism, are silently removed from the projection-wiring step; no new MappingProjections are added to them even if they appear in pathway.\n- If a (Pathway, LearningFunction) 2-tuple is passed as pathway, the LearningFunction is silently ignored; use add_linear_learning_pathway for trainable pathways.\n- Nodes do not need to be pre-added via add_node; add_linear_processing_pathway calls add_nodes internally for each entry.\n- default_projection_matrix only applies to projections that are auto-created (i.e., not explicitly interleaved in pathway); an explicit projection spec in pathway takes precedence.\n- The runtime resolves each node handle string to a live PsyNeuLink object before dispatch, so every string in pathway must correspond to a handle already known to the server.'
+TOOL_DESCRIPTION = 'Call this tool to wire a feed-forward chain of Mechanisms (and/or nested Compositions) into an existing Composition in one step. Pass an ordered list of node handles — the tool auto-creates MappingProjections between consecutive nodes — and returns a Pathway handle string. Use this whenever you want to connect two or more nodes linearly; prefer it over repeated `add_projection` calls for sequential pipelines.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string of the target Composition, as returned by create_composition.",\n      "type": "string"\n    },\n    "default_projection_matrix": {\n      "default": null,\n      "description": "Matrix to use for any unspecified MappingProjections, overriding the PNL default. Accepts a nested number array (e.g. [[1,0],[0,1]]), a matrix-keyword string (e.g. \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\'), or null to keep the PNL default (identity). Only applied where no explicit projection is given in pathway.",\n      "type": [\n        "array",\n        "string",\n        "null"\n      ]\n    },\n    "name": {\n      "default": null,\n      "description": "Name to assign to the returned Pathway. Supersedes any name embedded in a Pathway object passed as pathway. Omit to let PNL auto-name.",\n      "type": [\n        "string",\n        "null"\n      ]\n    },\n    "pathway": {\n      "description": "Ordered list of node handle strings defining the chain. Elements may be: (1) a node handle string (Mechanism or Composition), (2) an array of node handle strings for a parallel fan-in/fan-out layer, or (3) a matrix spec (nested number array or keyword string such as \'IDENTITY_MATRIX\') interleaved between two node entries to override the projection between that specific pair. Auto-created MappingProjections connect every consecutive pair that lacks an explicit projection.",\n      "items": {\n        "oneOf": [\n          {\n            "description": "Node handle or matrix keyword string.",\n            "type": "string"\n          },\n          {\n            "description": "A parallel set of node handles or a matrix row.",\n            "type": "array"\n          },\n          {\n            "description": "Scalar matrix spec (rare).",\n            "type": "number"\n          }\n        ]\n      },\n      "minItems": 2,\n      "type": "array"\n    }\n  },\n  "required": [\n    "composition",\n    "pathway"\n  ],\n  "type": "object"\n}\n\nNotes:\n• The first and last elements of `pathway` MUST be node handles (strings or arrays of strings), never a projection spec — a leading or trailing projection raises CompositionError.\n• If a 2-item (Pathway, LearningFunction) tuple is passed as `pathway`, the LearningFunction is silently ignored. For learning pathways use add_linear_learning_pathway instead.\n• ControlMechanisms that have monitor_for_control set are automatically removed from the projection chain with a warning; no MappingProjection is added to them. The tool compensates by wiring the preceding non-control node directly to the following node.\n• If the specified pathway is structurally identical to one that already exists in the Composition, the existing Pathway is returned unchanged (with a warning) — no duplicate is created.\n• Nested Compositions in the pathway are connected via their INPUT-role nodes (as receivers) and OUTPUT-role nodes (as senders); if the nested Composition has no such nodes yet, CompositionError is raised.\n• `default_projection_matrix` only fills gaps — it does not override an explicit projection spec interleaved in `pathway`.'
 TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle string of the target '
                                                   'Composition, as returned by '
                                                   'create_composition.',
                                    'type': 'string'},
-                  'default_projection_matrix': { 'description': 'Optional matrix spec '
-                                                                '(e.g. '
+                  'default_projection_matrix': { 'default': None,
+                                                 'description': 'Matrix to use for any '
+                                                                'unspecified '
+                                                                'MappingProjections, '
+                                                                'overriding the PNL '
+                                                                'default. Accepts a '
+                                                                'nested number array '
+                                                                '(e.g. [[1,0],[0,1]]), '
+                                                                'a matrix-keyword '
+                                                                'string (e.g. '
                                                                 "'IDENTITY_MATRIX', "
-                                                                "'FULL_CONNECTIVITY_MATRIX') "
-                                                                'or a numeric matrix '
-                                                                'expressed as a '
-                                                                'JSON-encoded 2-D '
-                                                                'array string to use '
-                                                                'for any auto-created '
-                                                                'MappingProjection '
-                                                                'whose matrix was not '
-                                                                'explicitly specified. '
-                                                                'Overrides the '
-                                                                'MappingProjection '
-                                                                'default. Omit to use '
-                                                                'PsyNeuLink defaults.',
-                                                 'type': 'string'},
-                  'name': { 'description': 'Optional name for the returned Pathway '
-                                           'object. Overrides any name carried by a '
-                                           'Pathway object passed as pathway.',
-                            'type': 'string'},
-                  'pathway': { 'description': 'Ordered sequence of node handles '
-                                              '(strings) defining the feed-forward '
-                                              'chain. Elements are node handle strings '
-                                              'or, when explicit projection control is '
-                                              'needed, alternating node / projection '
-                                              'specs. Auto-created MappingProjections '
-                                              'connect each consecutive pair when no '
-                                              'explicit projection is interleaved.',
-                               'items': { 'description': 'Handle string of a node '
-                                                         '(Mechanism or nested '
-                                                         'Composition) already '
-                                                         'registered in the server, or '
-                                                         'a special projection keyword '
-                                                         'between two node entries.',
-                                          'type': 'string'},
-                               'minItems': 1,
+                                                                "'FULL_CONNECTIVITY_MATRIX'), "
+                                                                'or null to keep the '
+                                                                'PNL default '
+                                                                '(identity). Only '
+                                                                'applied where no '
+                                                                'explicit projection '
+                                                                'is given in pathway.',
+                                                 'type': ['array', 'string', 'null']},
+                  'name': { 'default': None,
+                            'description': 'Name to assign to the returned Pathway. '
+                                           'Supersedes any name embedded in a Pathway '
+                                           'object passed as pathway. Omit to let PNL '
+                                           'auto-name.',
+                            'type': ['string', 'null']},
+                  'pathway': { 'description': 'Ordered list of node handle strings '
+                                              'defining the chain. Elements may be: '
+                                              '(1) a node handle string (Mechanism or '
+                                              'Composition), (2) an array of node '
+                                              'handle strings for a parallel '
+                                              'fan-in/fan-out layer, or (3) a matrix '
+                                              'spec (nested number array or keyword '
+                                              "string such as 'IDENTITY_MATRIX') "
+                                              'interleaved between two node entries to '
+                                              'override the projection between that '
+                                              'specific pair. Auto-created '
+                                              'MappingProjections connect every '
+                                              'consecutive pair that lacks an explicit '
+                                              'projection.',
+                               'items': { 'oneOf': [ { 'description': 'Node handle or '
+                                                                      'matrix keyword '
+                                                                      'string.',
+                                                       'type': 'string'},
+                                                     { 'description': 'A parallel set '
+                                                                      'of node handles '
+                                                                      'or a matrix '
+                                                                      'row.',
+                                                       'type': 'array'},
+                                                     { 'description': 'Scalar matrix '
+                                                                      'spec (rare).',
+                                                       'type': 'number'}]},
+                               'minItems': 2,
                                'type': 'array'}},
   'required': ['composition', 'pathway'],
   'type': 'object'}
-TOOL_NOTES = '- If the exact same pathway (nodes + projections) already exists in the Composition, the existing Pathway is returned with a warning rather than a duplicate being created.\n- ControlMechanisms that have monitor_for_control set, and ObjectiveMechanisms that project to a ControlMechanism, are silently removed from the projection-wiring step; no new MappingProjections are added to them even if they appear in pathway.\n- If a (Pathway, LearningFunction) 2-tuple is passed as pathway, the LearningFunction is silently ignored; use add_linear_learning_pathway for trainable pathways.\n- Nodes do not need to be pre-added via add_node; add_linear_processing_pathway calls add_nodes internally for each entry.\n- default_projection_matrix only applies to projections that are auto-created (i.e., not explicitly interleaved in pathway); an explicit projection spec in pathway takes precedence.\n- The runtime resolves each node handle string to a live PsyNeuLink object before dispatch, so every string in pathway must correspond to a handle already known to the server.'
+TOOL_NOTES = '• The first and last elements of `pathway` MUST be node handles (strings or arrays of strings), never a projection spec — a leading or trailing projection raises CompositionError.\n• If a 2-item (Pathway, LearningFunction) tuple is passed as `pathway`, the LearningFunction is silently ignored. For learning pathways use add_linear_learning_pathway instead.\n• ControlMechanisms that have monitor_for_control set are automatically removed from the projection chain with a warning; no MappingProjection is added to them. The tool compensates by wiring the preceding non-control node directly to the following node.\n• If the specified pathway is structurally identical to one that already exists in the Composition, the existing Pathway is returned unchanged (with a warning) — no duplicate is created.\n• Nested Compositions in the pathway are connected via their INPUT-role nodes (as receivers) and OUTPUT-role nodes (as senders); if the nested Composition has no such nodes yet, CompositionError is raised.\n• `default_projection_matrix` only fills gaps — it does not override an explicit projection spec interleaved in `pathway`.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -78,5 +93,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def add_linear_processing_pathway(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool after creating a Composition to wire a feed-forward chain of nodes into it.'
+        'Call this tool to wire a feed-forward chain of Mechanisms (and/or nested Compositions) into an existing Composition in one step.'
         return _impl(args or {})
