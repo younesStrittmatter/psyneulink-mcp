@@ -124,16 +124,22 @@ def render_module(
         f"TOOL_NOTES = {notes!r}",
         "",
         "",
-        "def _impl(**kwargs: Any) -> Any:",
+        "def _impl(kwargs: dict[str, Any]) -> Any:",
         f"    target = pnl.{symbol.short_name}",
         *impl_body_lines,
         "",
         "",
         "def register(mcp: Any) -> None:",
         '    @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)',
-        f"    def {tool_name}(**kwargs: Any) -> Any:",
+        # FastMCP derives an MCP `inputSchema` from the function signature.
+        # `**kwargs` would surface as a single required `kwargs` arg
+        # rather than passing through the LLM's chosen parameters, so
+        # we declare an explicit `args: dict` parameter that the impl
+        # then unpacks. The real per-symbol schema lives in
+        # TOOL_PARAMETERS / TOOL_DESCRIPTION for the LLM consumer.
+        f"    def {tool_name}(args: dict[str, Any] | None = None) -> Any:",
         f"        {docstring_first_line!r}",
-        "        return _impl(**kwargs)",
+        "        return _impl(args or {})",
         "",
     ]
     return "\n".join(lines)

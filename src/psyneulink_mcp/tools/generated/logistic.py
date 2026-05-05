@@ -54,7 +54,7 @@ TOOL_PARAMETERS = { 'properties': { 'bias': { 'default': 0,
 TOOL_NOTES = 'bias and x_0 have identical effects except opposite signs: bias shifts the curve right (ML convention), x_0 shifts it left (standard math convention). Do not set both unless you intend their combined effect (net shift = bias - x_0). The default output range is (0, 1); scale stretches it to (0, scale) and offset then shifts it, so the effective range becomes (offset, scale + offset). The derivative method uses the output value, not the input — pass output= when calling it directly for backprop efficiency.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Logistic
     instance = target(**kwargs)
     return repr(instance)
@@ -62,6 +62,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_logistic(**kwargs: Any) -> Any:
+    def create_logistic(args: dict[str, Any] | None = None) -> Any:
         "Call this tool to create a Logistic (sigmoid) transfer function for use as a TransferMechanism's function or standalone transformation."
-        return _impl(**kwargs)
+        return _impl(args or {})

@@ -40,7 +40,7 @@ TOOL_PARAMETERS = { 'properties': { 'intercept': { 'default': 0,
 TOOL_NOTES = 'All four parameters default to values that implement the identity function (slope=1, intercept=0, scale=1, offset=0); PsyNeuLink may silently replace a default-parameter Linear with the Identity Function during compilation. scale and offset are NOT equivalent to slope and intercept: slope and intercept transform the variable first, then scale multiplies the intermediate result and offset shifts it — so scale*slope is the effective gain, not just slope. The derivative method returns scale*slope, not slope alone. default_variable is omitted from the schema because it is inferred from the owning Mechanism at runtime; only pass it if you need an explicit shape template.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Linear
     instance = target(**kwargs)
     return repr(instance)
@@ -48,6 +48,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_linear(**kwargs: Any) -> Any:
+    def create_linear(args: dict[str, Any] | None = None) -> Any:
         'Use this tool to create a PsyNeuLink Linear transfer function that applies the transform `scale * (slope * variable + intercept) + offset`.'
-        return _impl(**kwargs)
+        return _impl(args or {})

@@ -64,7 +64,7 @@ TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': '1D arr
 TOOL_NOTES = '- `transfer_fct` (a callable that transforms the post-matrix output before metric comparison) is intentionally omitted from the schema because callables cannot be serialized to JSON; pass it only via direct Python construction.\n- The ENERGY metric is the default and is NOT a standard distance metric — it computes a Hopfield-style energy, not a geometric distance.\n- ENTROPY as metric is silently converted to CROSS_ENTROPY internally; if you need true entropy behavior verify results carefully.\n- matrix is always convolved with HOLLOW_MATRIX before use, so self-connections are always eliminated regardless of what you pass.\n- Passing a 2D matrix as `matrix` requires it to be square with side == len(variable); mismatches raise FunctionError at instantiation, not at call time.\n- If neither default_variable nor input_shapes is provided, the variable shape is flexible and will be inferred at runtime from the first call.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Stability
     instance = target(**kwargs)
     return repr(instance)
@@ -72,6 +72,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_stability(**kwargs: Any) -> Any:
+    def create_stability(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to instantiate a Stability objective function that measures how stable a neural activation pattern is under recurrent self-connections.'
-        return _impl(**kwargs)
+        return _impl(args or {})

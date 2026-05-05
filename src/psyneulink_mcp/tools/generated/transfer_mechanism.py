@@ -121,7 +121,7 @@ TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': 'Two-element [min, 
 TOOL_NOTES = "- `integrator_mode`, `integration_rate`, `initial_value`, and `on_resume_integrator_mode` only have effect when `integrator_mode=true`; setting them without enabling integrator_mode silently has no effect at runtime.\n- `clip` must satisfy clip[0] < clip[1]; if either bound falls outside the function's output range after scale/offset, PNL emits a warning and ignores that bound.\n- `noise` type cannot be changed after construction: if constructed with a scalar you cannot later assign an array, and vice versa.\n- `integration_rate` must be in the closed interval [0, 1]; values outside this range raise a validation error.\n- When `input_shapes` > 1 (or the variable has multiple items), the default `output_ports=['RESULTS']` is automatically expanded to one named port per input item (e.g. 'RESULT-0', 'RESULT-1', …), not a single 'RESULT' port — this surprises agents expecting a single output.\n- `function` must be a TransferFunction or SelectionFunction subclass; passing an arbitrary Python function is supported only if its output shape matches its input shape.\n- `termination_threshold` is only evaluated when the owning Composition has `execute_until_finished=True`; without that flag, the mechanism always executes exactly once per trial regardless of threshold.\n- `termination_measure` is not exposed as a JSON-serializable parameter here because it requires a PNL Function instance (e.g. Distance); if you need a custom termination measure, file a tool issue.\n- The COMBINE standard output port (element-wise sum of all value items) is available by adding 'COMBINE' to `output_ports`, but requires all input items to have the same dimensionality."
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.TransferMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -129,6 +129,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_transfer_mechanism(**kwargs: Any) -> Any:
+    def create_transfer_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to create a TransferMechanism — a processing node that applies a transfer function (default: Linear) to its input and returns the transformed result.'
-        return _impl(**kwargs)
+        return _impl(args or {})

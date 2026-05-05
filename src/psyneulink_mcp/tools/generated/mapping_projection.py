@@ -65,7 +65,7 @@ TOOL_PARAMETERS = { 'properties': { 'learnable': { 'default': True,
 TOOL_NOTES = "- If both sender and receiver are omitted, the projection enters deferred initialization and must be fully specified when added to a Composition.\n- matrix defaults to AUTO_ASSIGN_MATRIX: identity matrix when sender and receiver sizes match, full connectivity matrix otherwise. Mismatched sizes with IDENTITY_MATRIX or HOLLOW_MATRIX raise a ProjectionError.\n- Passing learnable=false and a numeric learning_rate simultaneously raises a MappingError at construction time.\n- List inputs for matrix are automatically converted to np.ndarray internally.\n- The matrix ParameterPort uses an AccumulatorIntegrator function internally for learning; do not confuse this with the projection's main transform function (MatrixTransform).\n- learning_rate=True or learning_rate=None both resolve to the Composition's learning_rate at runtime; only a float/int pins a specific value."
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.MappingProjection
     instance = target(**kwargs)
     return repr(instance)
@@ -73,6 +73,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_mapping_projection(**kwargs: Any) -> Any:
+    def create_mapping_projection(args: dict[str, Any] | None = None) -> Any:
         "Call this tool to create a MappingProjection that transmits the output of one Mechanism's OutputPort to the InputPort of another (or the same) Mechanism."
-        return _impl(**kwargs)
+        return _impl(args or {})

@@ -171,7 +171,7 @@ TOOL_PARAMETERS = { 'properties': { 'auto': { 'description': 'Value(s) for the d
 TOOL_NOTES = "Matrix precedence rules are non-obvious and critical: (1) if auto AND hetero are both specified, matrix is ignored entirely — final matrix = diagonal(auto) + hollow(hetero); (2) if only auto is specified with matrix, auto overrides the diagonal of matrix; (3) if only hetero is specified with matrix, hetero overrides the off-diagonal of matrix; (4) any non-zero diagonal values in a hetero 2D array are silently zeroed before use. Default matrix is HOLLOW_MATRIX (all zeros, including diagonal), not an identity or full matrix. Learning is completely inert unless enable_learning=True at construction or configure_learning() is called afterward — setting learning_enabled=True on an unconfigured mechanism only raises a warning and is ignored. The recurrent projection is an AutoAssociativeProjection from the mechanism's primary OutputPort back to its input; it is automatically added as an aux_component to any Composition the mechanism joins. has_recurrent_input_port=True changes the InputPort topology (adds a separate RECURRENT port and renames the primary port EXTERNAL), which affects how external inputs must be provided. LLVM/compiled execution does not support has_recurrent_input_port=True (combination_function path)."
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.RecurrentTransferMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -179,6 +179,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_recurrent_transfer_mechanism(**kwargs: Any) -> Any:
+    def create_recurrent_transfer_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Use this tool to create a RecurrentTransferMechanism — a single-layer auto-recurrent neural network node that feeds its own output back as input via a weighted self-projection.'
-        return _impl(**kwargs)
+        return _impl(args or {})

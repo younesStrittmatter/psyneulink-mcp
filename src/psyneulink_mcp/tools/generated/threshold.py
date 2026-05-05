@@ -58,7 +58,7 @@ TOOL_PARAMETERS = { 'properties': { 'atol': { 'default': 0,
 TOOL_NOTES = '- `comparator` must be exactly one of: `<`, `<=`, `>`, `>=`, `==`, `!=` — any other string raises ConditionError at construction time.\n- `parameter` must exist on the dependency node — passing an invalid name raises ConditionError immediately.\n- The comparison is always scalar. If the parameter value is a multi-element array or list and `indices` is not provided, the condition will error at evaluation time. Use `indices` to drill into the value (e.g., `[0]` for the first element).\n- `atol` and `rtol` are silently ignored (with a warning) when `comparator` is `<`, `<=`, `>`, or `>=`. Only meaningful for `==` and `!=`.\n- `rtol` is relative to `threshold`, not to the parameter value (mirrors `numpy.isclose` convention).\n- A single integer for `indices` is automatically wrapped in a list internally.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Threshold
     instance = target(**kwargs)
     return repr(instance)
@@ -66,6 +66,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_threshold(**kwargs: Any) -> Any:
+    def create_threshold(args: dict[str, Any] | None = None) -> Any:
         'Use this tool to create a scheduling Condition that halts or gates execution of a PsyNeuLink Composition until a named parameter on a specific node crosses (or reaches) a fixed threshold value.'
-        return _impl(**kwargs)
+        return _impl(args or {})

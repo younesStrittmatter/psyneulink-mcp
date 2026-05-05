@@ -35,7 +35,7 @@ TOOL_PARAMETERS = { 'properties': { 'name': { 'description': 'Optional human-rea
 TOOL_NOTES = '`default_projection_matrix` is NOT a constructor keyword argument despite appearing in older docstrings — it is parsed automatically when `pathway` is a tuple of the form `(list, matrix)` or `(list, matrix, learning_function)`. Passing it as a keyword will raise a CompositionError. A Pathway created outside a Composition is a *template*: `.roles`, `.learning_components`, `.input`, `.output` all return None until the Pathway is added to a Composition. The `composition` kwarg is internal and injected by the Composition at add-time; agents should never pass it.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Pathway
     instance = target(**kwargs)
     return repr(instance)
@@ -43,6 +43,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_pathway(**kwargs: Any) -> Any:
+    def create_pathway(args: dict[str, Any] | None = None) -> Any:
         "Call this tool to create a Pathway — a named, ordered sequence of Nodes (Mechanisms or Compositions) and interleaved Projections — either as a reusable template or to pass directly to a Composition's `add_pathway` / `add_linear_processing_pathway` call."
-        return _impl(**kwargs)
+        return _impl(args or {})

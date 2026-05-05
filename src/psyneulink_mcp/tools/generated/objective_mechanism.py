@@ -66,7 +66,7 @@ TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Option
 TOOL_NOTES = "- `monitor` is the only required argument; passing `None` or an empty list is silently normalized to `None`, which will likely cause an error downstream — always provide at least one item.\n- The deprecated keyword `monitored_output_ports` is aliased to `monitor`; do not use it, as a warning is emitted and it will be removed.\n- `output_ports` is normalized: if `None` or the string `'OUTCOME'` is passed, it is automatically converted to `['OUTCOME']`.\n- Per-port weights and exponents are set on individual InputPort specs (as tuples or dicts), not directly on this constructor; they are then propagated to `function.weights` / `function.exponents` at instantiation time.\n- When the ObjectiveMechanism is assigned to a ControlMechanism, `modulatory_mechanism` is set automatically by the ControlMechanism — do not set it manually.\n- If any monitored InputPort shadows another Mechanism's InputPort that receives multiple Projections, `monitor` may contain more entries than `input_ports`."
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.ObjectiveMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -74,6 +74,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_objective_mechanism(**kwargs: Any) -> Any:
+    def create_objective_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to create an ObjectiveMechanism that monitors the output values of one or more other Mechanisms and combines them into a scalar or vector OUTCOME signal.'
-        return _impl(**kwargs)
+        return _impl(args or {})

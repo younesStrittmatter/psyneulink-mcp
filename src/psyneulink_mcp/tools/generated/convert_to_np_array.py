@@ -34,7 +34,7 @@ TOOL_PARAMETERS = { 'properties': { 'dimension': { 'description': 'Minimum numbe
 TOOL_NOTES = '- `dimension` only accepts 1, 2, or null (omitted); any other integer raises UtilitiesError.\n- Ragged inputs (lists of sub-arrays with unequal lengths) are stored as object-dtype arrays when `dimension=2`; the 2-D reshape step is intentionally skipped in that case to avoid data loss.\n- `value` is typed as `array` in the schema for agent convenience, but scalars and nested structures are also accepted by the underlying Python function — if you need to pass a bare scalar, wrap it in a single-element list.\n- The function uses `safe_create_np_array` internally, which handles torch tensors as well as plain Python objects; the returned array may be a torch tensor if the input was one.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.convert_to_np_array
     result = target(**kwargs)
     try:
@@ -46,6 +46,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def convert_to_np_array(**kwargs: Any) -> Any:
+    def convert_to_np_array(args: dict[str, Any] | None = None) -> Any:
         'Call this tool when you need to normalize a Python value (scalar, list, nested list, or existing array) into a NumPy ndarray before passing it to a PsyNeuLink component that expects array input.'
-        return _impl(**kwargs)
+        return _impl(args or {})

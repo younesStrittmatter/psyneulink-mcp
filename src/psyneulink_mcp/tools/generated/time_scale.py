@@ -32,7 +32,7 @@ TOOL_PARAMETERS = { 'properties': { 'value': { 'description': 'Integer index of 
 TOOL_NOTES = 'The PsyNeuLink docstring uses older aliases (TIME_STEP, TRIAL, RUN) that no longer match the actual enum member names, which come from the underlying graph_scheduler library (CONSIDERATION_SET_EXECUTION, ENVIRONMENT_STATE_UPDATE, ENVIRONMENT_SEQUENCE). Use the integer values or the graph_scheduler names — the legacy PNL aliases may not resolve. `TimeScale` supports `<` ordering so members can be compared directly. `TimeScale.get_parent(ts)` and `TimeScale.get_child(ts)` return adjacent levels; calling these on the coarsest (LIFE) or finest (CONSIDERATION_SET_EXECUTION) level respectively will raise a ValueError.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.TimeScale
     instance = target(**kwargs)
     return repr(instance)
@@ -40,6 +40,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_time_scale(**kwargs: Any) -> Any:
+    def create_time_scale(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to retrieve a specific TimeScale enum constant when you need to pass a granularity level to a Scheduler, Condition, or any PsyNeuLink API that accepts a TimeScale argument (e.g., `num_trials_in_run`, condition thresholds, or clock queries).'
-        return _impl(**kwargs)
+        return _impl(args or {})

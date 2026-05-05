@@ -96,7 +96,7 @@ TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': '[min, max] bounds 
 TOOL_NOTES = "- `integrator_mode` defaults to True here, unlike the parent RecurrentTransferMechanism where it defaults to False — the LCA is designed to run in integrator mode.\n- `competition` specifies inhibition *magnitude*; the off-diagonal weights are set to *negative* competition. Passing a negative competition value produces a warning and creates excitatory (positive) off-diagonal connections.\n- `self_excitation` is an alias for `auto`; do not pass both. Similarly, `competition` and `hetero` encode the same parameter with opposite sign — do not pass both.\n- If `matrix` is passed as a kwarg, `self_excitation` and `competition` are silently ignored and the explicit matrix is used instead.\n- `threshold_criterion` of MAX_VS_NEXT or MAX_VS_AVG requires `input_shapes` >= 2.\n- `threshold` and `termination_threshold` cannot both be specified; likewise `threshold_criterion` and `termination_measure` cannot both be specified.\n- Default transfer function is Logistic (not Linear), giving outputs in (0, 1).\n- The mechanism runs until `is_finished` (threshold reached) or the Composition's trial limit. Without a threshold, set trial count explicitly to avoid infinite accumulation."
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.LCAMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -104,6 +104,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_lca_mechanism(**kwargs: Any) -> Any:
+    def create_lca_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to create a Leaky Competitive Accumulator (LCA) — a recurrent mechanism that models competitive decision-making, winner-take-all dynamics, or evidence accumulation over time.'
-        return _impl(**kwargs)
+        return _impl(args or {})

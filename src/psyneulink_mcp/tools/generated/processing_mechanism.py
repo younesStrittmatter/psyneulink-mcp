@@ -72,7 +72,7 @@ TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Templa
 TOOL_NOTES = 'When the mechanism has more than one InputPort AND the function is a TransferFunction subclass, OutputPorts are auto-created one-per-InputPort and named after their corresponding InputPort — passing explicit output_ports that number fewer than the inputs triggers partial auto-fill logic rather than an error. Standard output port names (MEAN, MAX_VAL, etc.) operate on axis-0 of the mechanism value; they are additive — include them in output_ports alongside the default port if you need both raw and derived outputs. input_shapes and default_variable are mutually exclusive; if both are supplied, default_variable wins. The prefs parameter is rarely needed from agent code — omit it.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.ProcessingMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -80,6 +80,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_processing_mechanism(**kwargs: Any) -> Any:
+    def create_processing_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to create a general-purpose ProcessingMechanism node in a PsyNeuLink Composition — use it when no more specialized subclass (TransferMechanism, IntegratorMechanism, etc.) fits the task, or when you need a lightweight node with a custom function.'
-        return _impl(**kwargs)
+        return _impl(args or {})

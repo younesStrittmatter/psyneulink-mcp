@@ -137,7 +137,7 @@ TOOL_PARAMETERS = { 'properties': { 'allow_probes': { 'default': True,
 TOOL_NOTES = '- `pathways` is the recommended entry point: a flat list `[MechA, MechB, MechC]` automatically inserts MappingProjections between adjacent mechanisms.\n- `learning_rate` default is 0.05 (from the Parameters inner class), not None as the constructor signature implies.\n- `controller_mode` takes lowercase strings "before" or "after" — do not use PNL keyword constants BEFORE/AFTER.\n- `enable_controller` is automatically set True when a controller is provided; you rarely need to set it explicitly.\n- For nested (inner) Compositions, `include_probes_in_output` is always forced True regardless of the argument.\n- A `set` of Mechanisms at a position in a pathways list creates parallel (non-connected) nodes at that point; doubly-nested lists beyond a single level of nesting cause errors.\n- `pathways`, `nodes`, and `projections` accept live PNL Python objects — they cannot be serialized to JSON. Pass the Python objects returned by other create_* tools.\n- `controller_condition` and `prefs` are omitted from this schema because they require live PNL objects; use `report_tool_issue` if you need them.\n- `show_graph_attributes` is omitted; it only affects visualization, not execution.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.Composition
     instance = target(**kwargs)
     return repr(instance)
@@ -145,6 +145,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_composition(**kwargs: Any) -> Any:
+    def create_composition(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to construct a PsyNeuLink `Composition` — the top-level executable container that wires Mechanisms and Projections into a runnable computational graph.'
-        return _impl(**kwargs)
+        return _impl(args or {})

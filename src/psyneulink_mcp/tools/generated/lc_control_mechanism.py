@@ -167,7 +167,7 @@ TOOL_PARAMETERS = { 'properties': { 'a_v_FitzHughNagumo': { 'default': -0.333333
 TOOL_NOTES = '- modulated_mechanisms items must each have a function with a multiplicative_param (e.g., Logistic gain, Linear slope); mechanisms without one will raise an error.\n- When passing a Composition to modulated_mechanisms, only ProcessingMechanisms already added to the Composition at construction time are captured — mechanisms added later are not automatically included.\n- The output gain signal is g(t) = base_level_gain + scaling_factor_gain * w(t), where w is the second element returned by the FitzHugh-Nagumo integrator, NOT v; confusing w and v is a common error.\n- value (4-element array: [gain, w, v, x]) differs from output_values (1-element: [gain] only); use output_values when reading the control allocation downstream.\n- The docstring labels time_step_size default as 0.0, but the constructor signature shows 0.05 — trust the constructor.\n- mode_FitzHughNagumo=1.0 is full phasic mode; set toward 0.0 for tonic-dominant behavior.\n- An ObjectiveMechanism using CombineMeans(SUM) is automatically created unless objective_mechanism is explicitly provided; pass objective_mechanism=False to suppress it (e.g., when driving LC with a direct input port instead).\n- base_level_gain and scaling_factor_gain are modulable parameters, meaning they can themselves be controlled by an outer ControlMechanism.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.LCControlMechanism
     instance = target(**kwargs)
     return repr(instance)
@@ -175,6 +175,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_lc_control_mechanism(**kwargs: Any) -> Any:
+    def create_lc_control_mechanism(args: dict[str, Any] | None = None) -> Any:
         'Call this tool to create a Locus Coeruleus / Norepinephrine (LC-NE) control mechanism that dynamically modulates the gain (multiplicative parameter) of one or more processing mechanisms over time.'
-        return _impl(**kwargs)
+        return _impl(args or {})

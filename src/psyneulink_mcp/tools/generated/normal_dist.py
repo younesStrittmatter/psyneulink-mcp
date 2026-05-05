@@ -39,7 +39,7 @@ TOOL_PARAMETERS = { 'properties': { 'mean': { 'default': 0,
 TOOL_NOTES = 'standard_deviation must be > 0 at runtime (validated); passing 0.0 is technically allowed and returns mean, but negative values raise FunctionError. The modulatory aliases are MULTIPLICATIVE_PARAM → standard_deviation and ADDITIVE_PARAM → mean, so ControlSignals targeting those aliases will scale/shift the distribution. Each call to the function draws one scalar float — not a vector. The internal random_state is derived from seed; omitting seed gives a non-reproducible sequence.'
 
 
-def _impl(**kwargs: Any) -> Any:
+def _impl(kwargs: dict[str, Any]) -> Any:
     target = pnl.NormalDist
     instance = target(**kwargs)
     return repr(instance)
@@ -47,6 +47,6 @@ def _impl(**kwargs: Any) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_normal_dist(**kwargs: Any) -> Any:
+    def create_normal_dist(args: dict[str, Any] | None = None) -> Any:
         'Use this tool to create a NormalDist function that samples from a Gaussian distribution, then assign it as the `function` parameter of a Mechanism (e.g., TransferMechanism) when you need stochastic normal noise or random normal outputs.'
-        return _impl(**kwargs)
+        return _impl(args or {})
