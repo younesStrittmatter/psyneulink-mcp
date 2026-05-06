@@ -16,7 +16,7 @@ __pnl_kind__ = 'function'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'random_matrix'
-TOOL_DESCRIPTION = 'Call this tool when you need to generate a random 2D weight matrix for initializing a PsyNeuLink Projection or Mechanism parameter. Returns a 2D numpy array of shape (num_rows × num_cols) where each entry is (uniform_random[0,1] + offset) * scale — by default, floats uniformly distributed in [0, 1].\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix (e.g., size of the receiving layer).",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix (e.g., size of the sending layer).",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Amount added to each random value before scaling. Use -0.5 or the string \'zero_center\' to center values around 0 (range [-0.5, 0.5] before scaling). Any other string raises an error.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative factor applied after offset. Use values > 1 to widen the range, < 1 to narrow it.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nThe docstring incorrectly states \'ZERO_CENTER\' maps to -0.05; the source code maps it to -0.5. Trust the source: \'zero_center\' → offset = -0.5, producing values in roughly [-0.5, 0.5] before scaling. The string comparison is case-insensitive (offset.upper() == \'ZERO_CENTER\'). Any other string value for offset raises UtilitiesError. The return value is a numpy ndarray, not a Python list — pass it directly as a matrix argument to PsyNeuLink components.'
+TOOL_DESCRIPTION = 'Call this tool when you need to initialize a weight matrix with random values for use as a PsyNeuLink projection matrix or parameter. Returns a 2D numpy array of shape (num_rows, num_cols) where each entry is (rand[0,1) + offset) * scale — by default, uniform floats in [0, 1).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix (e.g., size of the receiving layer).",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix (e.g., size of the sending layer).",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Value added to each random entry before scaling. Use -0.5 or the string \'zero_center\' to center values around 0. Default 0.0 yields values in [0, 1).",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative scale applied after offset. Use values > 1 to widen the range or < 1 to narrow it.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nThe \'zero_center\' string is matched case-insensitively and maps to offset=-0.5, producing values in [-0.5, 0.5) before scaling. Any other string value for offset raises an error. The docstring contains a typo (says -.05) but the actual offset applied is -0.5. Results are not reproducible across calls unless the caller seeds numpy\'s RNG beforehand.'
 TOOL_PARAMETERS = { 'properties': { 'num_cols': { 'description': 'Number of columns in the output matrix '
                                                '(e.g., size of the receiving layer).',
                                 'type': 'integer'},
@@ -24,22 +24,21 @@ TOOL_PARAMETERS = { 'properties': { 'num_cols': { 'description': 'Number of colu
                                                '(e.g., size of the sending layer).',
                                 'type': 'integer'},
                   'offset': { 'default': 0,
-                              'description': 'Amount added to each random value before '
+                              'description': 'Value added to each random entry before '
                                              'scaling. Use -0.5 or the string '
-                                             "'zero_center' to center values around 0 "
-                                             '(range [-0.5, 0.5] before scaling). Any '
-                                             'other string raises an error.',
+                                             "'zero_center' to center values around 0. "
+                                             'Default 0.0 yields values in [0, 1).',
                               'oneOf': [ {'type': 'number'},
                                          { 'enum': ['zero_center', 'ZERO_CENTER'],
                                            'type': 'string'}]},
                   'scale': { 'default': 1,
-                             'description': 'Multiplicative factor applied after '
-                                            'offset. Use values > 1 to widen the '
-                                            'range, < 1 to narrow it.',
+                             'description': 'Multiplicative scale applied after '
+                                            'offset. Use values > 1 to widen the range '
+                                            'or < 1 to narrow it.',
                              'type': 'number'}},
   'required': ['num_rows', 'num_cols'],
   'type': 'object'}
-TOOL_NOTES = "The docstring incorrectly states 'ZERO_CENTER' maps to -0.05; the source code maps it to -0.5. Trust the source: 'zero_center' → offset = -0.5, producing values in roughly [-0.5, 0.5] before scaling. The string comparison is case-insensitive (offset.upper() == 'ZERO_CENTER'). Any other string value for offset raises UtilitiesError. The return value is a numpy ndarray, not a Python list — pass it directly as a matrix argument to PsyNeuLink components."
+TOOL_NOTES = "The 'zero_center' string is matched case-insensitively and maps to offset=-0.5, producing values in [-0.5, 0.5) before scaling. Any other string value for offset raises an error. The docstring contains a typo (says -.05) but the actual offset applied is -0.5. Results are not reproducible across calls unless the caller seeds numpy's RNG beforehand."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -64,5 +63,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def random_matrix(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool when you need to generate a random 2D weight matrix for initializing a PsyNeuLink Projection or Mechanism parameter.'
+        'Call this tool when you need to initialize a weight matrix with random values for use as a PsyNeuLink projection matrix or parameter.'
         return _impl(args or {})
