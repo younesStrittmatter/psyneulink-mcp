@@ -11,57 +11,65 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '916cb886244fa17c05f9c7a530637204d9910513e4055d8cb83e33936e1c10af'
-__pnl_qualname__ = 'psyneulink.library.components.mechanisms.processing.transfer.recurrenttransfermechanism.Stability'
+__pnl_qualname__ = 'psyneulink.core.components.functions.nonstateful.objectivefunctions.Stability'
 __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_stability'
-TOOL_DESCRIPTION = 'Use this tool to create a `Stability` objective function that measures how much a state vector changes under a recurrent weight matrix. Call it when you need an energy/distance-based convergence metric for a RecurrentTransferMechanism or any network where you want to track whether a state has settled. Returns a configured `Stability` function object. HISTORICAL FAILURES: do NOT pass `name` (not accepted by Stability.__init__); do NOT pass `matrix="HOLLOW_MATRIX"` as a string literal (causes NoneType runtime error) — omit `matrix` entirely to get the default hollow matrix.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "1D list of numbers defining the shape and default value of the state vector. Provide this OR input_shapes, not both.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Length of the state vector; creates a zero-filled array of this size. Provide this OR default_variable, not both.",\n      "type": "integer"\n    },\n    "matrix": {\n      "description": "Square 2D recurrent weight matrix (list of lists). Must be NxN where N matches the variable length. OMIT this parameter to use the default HOLLOW_MATRIX (zeros on diagonal, ones off-diagonal). WARNING: do NOT pass the string \'HOLLOW_MATRIX\' \\u2014 it causes a NoneType runtime error; omit the parameter instead.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "metric": {\n      "default": "ENERGY",\n      "description": "Distance metric used to compute stability. ENERGY (default) computes -0.5 * v^T W v and is the standard Hopfield energy. Use EUCLIDEAN or COSINE for alternative convergence criteria.",\n      "enum": [\n        "ENERGY",\n        "ENTROPY",\n        "COSINE",\n        "CORRELATION",\n        "CROSS_ENTROPY",\n        "EUCLIDEAN",\n        "MAX_ABS_DIFF",\n        "NORMED_L0_SIMILARITY"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "default": false,\n      "description": "If true, divide the stability value by the length of the variable vector, producing a per-unit metric.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL: `name` is NOT a valid constructor argument for Stability — passing it raises TypeError. Do not include it.\n\nCRITICAL: Passing `matrix="HOLLOW_MATRIX"` as a string literal causes a runtime TypeError (`NoneType * float`) during internal matrix instantiation. To use the default hollow matrix (self-connections zeroed out), simply omit the `matrix` parameter entirely.\n\nYou must provide at least one of `default_variable` or `input_shapes` to define the vector shape; without it Stability defaults to a scalar variable which is rarely useful.\n\n`input_shapes` and `default_variable` are mutually exclusive; providing both raises a FunctionError unless `input_shapes == len(default_variable)`.\n\n`transfer_fct` (a Python callable applied after the weight matrix transform) cannot be passed through MCP and is omitted from the schema.\n\nThe `matrix` is internally convolved with HOLLOW_MATRIX to zero out the diagonal, so self-connections are always excluded from the stability calculation regardless of what matrix you supply.'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': '1D list of numbers defining '
-                                                       'the shape and default value of '
-                                                       'the state vector. Provide this '
-                                                       'OR input_shapes, not both.',
+TOOL_DESCRIPTION = 'Call `create_stability` when you need a PsyNeuLink `Stability` objective function that measures how stable a 1-D state vector is under recurrent weight dynamics. Use it before building a `RecurrentTransferMechanism` or any network that requires an energy/distance stability metric. Returns a `Stability` handle that can be passed as the `function` argument to other PNL components.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "1-D list of numbers defining both the size of the state space and its default values. REQUIRED \\u2014 always supply this (e.g. [0,0,0] for size 3). Using only `input_shapes` without this has caused a NoneType TypeError in matrix arithmetic (issue #1).",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Alternative to default_variable: length of the state array (zeros used as values). Unreliable when used alone \\u2014 pass `default_variable` instead whenever possible.",\n      "type": "integer"\n    },\n    "matrix": {\n      "default": "HOLLOW_MATRIX",\n      "description": "Recurrent weight matrix keyword. HOLLOW_MATRIX (default) eliminates self-connections. Custom numeric matrices cannot be passed through this JSON interface.",\n      "enum": [\n        "HOLLOW_MATRIX",\n        "IDENTITY_MATRIX",\n        "FULL_CONNECTIVITY_MATRIX",\n        "RANDOM_CONNECTIVITY_MATRIX"\n      ],\n      "type": "string"\n    },\n    "metric": {\n      "default": "ENERGY",\n      "description": "Stability/distance metric. ENERGY computes Hopfield-style energy. ENTROPY is internally converted to CROSS_ENTROPY by PNL.",\n      "enum": [\n        "ENERGY",\n        "ENTROPY",\n        "EUCLIDEAN",\n        "MAX_ABS_DIFF",\n        "COSINE",\n        "CORRELATION",\n        "CROSS_ENTROPY",\n        "L0",\n        "NORMED_L0_SIMILARITY",\n        "ANGLE"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "default": false,\n      "description": "If true, divides the stability result by the length of the state vector, producing a per-unit metric.",\n      "type": "boolean"\n    }\n  },\n  "required": [\n    "default_variable"\n  ],\n  "type": "object"\n}\n\nNotes:\nCRITICAL: Do NOT pass `name` as a parameter. `Stability.__init__` does not accept `name`; doing so raises `TypeError: unexpected keyword argument \'name\'` (confirmed issue #2). The name attribute is set internally by PNL.\n\nCRITICAL: Always supply `default_variable` as a concrete list of numbers. Using `input_shapes` alone (without `default_variable`) causes `TypeError: unsupported operand type(s) for *: \'NoneType\' and \'float\'` during matrix instantiation (confirmed issue #1).\n\n`transfer_fct` (a Python callable) cannot be serialized to JSON and is excluded from this schema; it defaults to None.\n\nENTROPY metric is silently converted to CROSS_ENTROPY internally — expected behavior, not a bug.\n\nDo not pass `matrix` as the string `"HOLLOW_MATRIX"` if you can omit it; the default already applies HOLLOW_MATRIX correctly.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': '1-D list of numbers defining '
+                                                       'both the size of the state '
+                                                       'space and its default values. '
+                                                       'REQUIRED — always supply this '
+                                                       '(e.g. [0,0,0] for size 3). '
+                                                       'Using only `input_shapes` '
+                                                       'without this has caused a '
+                                                       'NoneType TypeError in matrix '
+                                                       'arithmetic (issue #1).',
                                         'items': {'type': 'number'},
                                         'type': 'array'},
-                  'input_shapes': { 'description': 'Length of the state vector; '
-                                                   'creates a zero-filled array of '
-                                                   'this size. Provide this OR '
-                                                   'default_variable, not both.',
+                  'input_shapes': { 'description': 'Alternative to default_variable: '
+                                                   'length of the state array (zeros '
+                                                   'used as values). Unreliable when '
+                                                   'used alone — pass '
+                                                   '`default_variable` instead '
+                                                   'whenever possible.',
                                     'type': 'integer'},
-                  'matrix': { 'description': 'Square 2D recurrent weight matrix (list '
-                                             'of lists). Must be NxN where N matches '
-                                             'the variable length. OMIT this parameter '
-                                             'to use the default HOLLOW_MATRIX (zeros '
-                                             'on diagonal, ones off-diagonal). '
-                                             'WARNING: do NOT pass the string '
-                                             "'HOLLOW_MATRIX' — it causes a NoneType "
-                                             'runtime error; omit the parameter '
-                                             'instead.',
-                              'items': {'items': {'type': 'number'}, 'type': 'array'},
-                              'type': 'array'},
+                  'matrix': { 'default': 'HOLLOW_MATRIX',
+                              'description': 'Recurrent weight matrix keyword. '
+                                             'HOLLOW_MATRIX (default) eliminates '
+                                             'self-connections. Custom numeric '
+                                             'matrices cannot be passed through this '
+                                             'JSON interface.',
+                              'enum': [ 'HOLLOW_MATRIX',
+                                        'IDENTITY_MATRIX',
+                                        'FULL_CONNECTIVITY_MATRIX',
+                                        'RANDOM_CONNECTIVITY_MATRIX'],
+                              'type': 'string'},
                   'metric': { 'default': 'ENERGY',
-                              'description': 'Distance metric used to compute '
-                                             'stability. ENERGY (default) computes '
-                                             '-0.5 * v^T W v and is the standard '
-                                             'Hopfield energy. Use EUCLIDEAN or COSINE '
-                                             'for alternative convergence criteria.',
+                              'description': 'Stability/distance metric. ENERGY '
+                                             'computes Hopfield-style energy. ENTROPY '
+                                             'is internally converted to CROSS_ENTROPY '
+                                             'by PNL.',
                               'enum': [ 'ENERGY',
                                         'ENTROPY',
+                                        'EUCLIDEAN',
+                                        'MAX_ABS_DIFF',
                                         'COSINE',
                                         'CORRELATION',
                                         'CROSS_ENTROPY',
-                                        'EUCLIDEAN',
-                                        'MAX_ABS_DIFF',
-                                        'NORMED_L0_SIMILARITY'],
+                                        'L0',
+                                        'NORMED_L0_SIMILARITY',
+                                        'ANGLE'],
                               'type': 'string'},
                   'normalize': { 'default': False,
-                                 'description': 'If true, divide the stability value '
-                                                'by the length of the variable vector, '
+                                 'description': 'If true, divides the stability result '
+                                                'by the length of the state vector, '
                                                 'producing a per-unit metric.',
                                  'type': 'boolean'}},
-  'required': [],
+  'required': ['default_variable'],
   'type': 'object'}
-TOOL_NOTES = 'CRITICAL: `name` is NOT a valid constructor argument for Stability — passing it raises TypeError. Do not include it.\n\nCRITICAL: Passing `matrix="HOLLOW_MATRIX"` as a string literal causes a runtime TypeError (`NoneType * float`) during internal matrix instantiation. To use the default hollow matrix (self-connections zeroed out), simply omit the `matrix` parameter entirely.\n\nYou must provide at least one of `default_variable` or `input_shapes` to define the vector shape; without it Stability defaults to a scalar variable which is rarely useful.\n\n`input_shapes` and `default_variable` are mutually exclusive; providing both raises a FunctionError unless `input_shapes == len(default_variable)`.\n\n`transfer_fct` (a Python callable applied after the weight matrix transform) cannot be passed through MCP and is omitted from the schema.\n\nThe `matrix` is internally convolved with HOLLOW_MATRIX to zero out the diagonal, so self-connections are always excluded from the stability calculation regardless of what matrix you supply.'
+TOOL_NOTES = 'CRITICAL: Do NOT pass `name` as a parameter. `Stability.__init__` does not accept `name`; doing so raises `TypeError: unexpected keyword argument \'name\'` (confirmed issue #2). The name attribute is set internally by PNL.\n\nCRITICAL: Always supply `default_variable` as a concrete list of numbers. Using `input_shapes` alone (without `default_variable`) causes `TypeError: unsupported operand type(s) for *: \'NoneType\' and \'float\'` during matrix instantiation (confirmed issue #1).\n\n`transfer_fct` (a Python callable) cannot be serialized to JSON and is excluded from this schema; it defaults to None.\n\nENTROPY metric is silently converted to CROSS_ENTROPY internally — expected behavior, not a bug.\n\nDo not pass `matrix` as the string `"HOLLOW_MATRIX"` if you can omit it; the default already applies HOLLOW_MATRIX correctly.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -86,5 +94,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_stability(args: dict[str, Any] | None = None) -> Any:
-        'Use this tool to create a `Stability` objective function that measures how much a state vector changes under a recurrent weight matrix.'
+        'Call `create_stability` when you need a PsyNeuLink `Stability` objective function that measures how stable a 1-D state vector is under recurrent weight dynamics.'
         return _impl(args or {})
