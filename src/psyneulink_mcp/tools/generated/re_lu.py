@@ -30,42 +30,43 @@ __pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebeb
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_re_lu'
-TOOL_DESCRIPTION = 'Construct a PsyNeuLink ReLU transfer function — a rectified-linear (optionally leaky) DeterministicTransferFunction. Call this when you need the function object itself to assign as the `function=` of a TransferMechanism (or any compatible component), not when you want to evaluate a numeric ReLU on data. Beyond what TransferFunction/DeterministicTransferFunction provide, this class adds three signature parameters specific to ReLU: `gain` (multiplier on `variable - bias`), `bias` (threshold subtracted from variable), and `leak` (slope for the negative side; `0.0` = standard ReLU, values in (0,1] = Leaky ReLU). The post-transform `scale` and `offset` are inherited from DeterministicTransferFunction. Returns a ReLU Function instance (formula: `scale * max(gain*(variable-bias), leak*gain*(variable-bias)) + offset`).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "bias": {\n      "description": "Threshold subtracted from each element of variable; the rectifier hinge sits at variable == bias. Default 0.0.",\n      "type": "number"\n    },\n    "default_variable": {\n      "description": "Template for the value to be transformed; a scalar or array shape that fixes the function\'s input shape. Optional.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "gain": {\n      "description": "Multiplier applied to (variable - bias) before the max/leak step. Default 1.0.",\n      "type": "number"\n    },\n    "leak": {\n      "description": "Slope on the negative side of the hinge. 0.0 gives a standard ReLU; values in (0, 1] give a Leaky ReLU. Default 0.0.",\n      "type": "number"\n    },\n    "name": {\n      "description": "Optional name for the Function instance; FunctionRegistry assigns a default if omitted.",\n      "type": "string"\n    },\n    "offset": {\n      "description": "Constant added after scale is applied. Default 0.0.",\n      "type": "number"\n    },\n    "scale": {\n      "description": "Multiplier applied to the rectified value before offset is added. Default 1.0.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nPass parameters as flat top-level keyword arguments (e.g. {"gain": 2.0, "leak": 0.1}). Do NOT wrap them under an "args" or "kwargs" key — ReLU\'s constructor rejects an unknown `args` argument with `ComponentError: Illegal argument in constructor (type: ReLU): \'args\'` (this exact error has been observed in feedback). The tool returns a ReLU Function object, not a numeric output; to evaluate it, attach it to a Mechanism or call it as a callable. `leak` is conventionally between 0 and 1 — values outside that range are accepted by the constructor but are not standard Leaky ReLU. `gain` and `bias` are also exposed as the MULTIPLICATIVE_PARAM and ADDITIVE_PARAM aliases respectively, which matters if the function is being modulated by a ControlSignal.'
-TOOL_PARAMETERS = { 'properties': { 'bias': { 'description': 'Threshold subtracted from each element of '
-                                           'variable; the rectifier hinge sits at '
-                                           'variable == bias. Default 0.0.',
+TOOL_DESCRIPTION = 'Construct a PsyNeuLink ReLU transfer function — a rectified linear (optionally leaky) activation that maps `x = gain * (variable - bias)` to `scale * max(x, leak * x) + offset`. Call this when you need a ReLU/Leaky-ReLU activation to attach to a TransferMechanism (or any component that accepts a TransferFunction); returns a Function handle, not a numeric value. Adds `gain`, `bias`, `leak`, `scale`, `offset` on top of the generic TransferFunction / DeterministicTransferFunction / Function_Base contract — see those parents for shape/owner/prefs semantics.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "bias": {\n      "default": 0,\n      "description": "Threshold subtracted from each element of variable before gain. Default 0.0.",\n      "type": "number"\n    },\n    "default_variable": {\n      "description": "Template value/array shape to be transformed; defaults to the class default scalar.",\n      "items": {\n        "type": "number"\n      },\n      "type": [\n        "number",\n        "array"\n      ]\n    },\n    "gain": {\n      "default": 1,\n      "description": "Multiplier applied to (variable - bias). Default 1.0.",\n      "type": "number"\n    },\n    "leak": {\n      "default": 0,\n      "description": "Slope for the negative side (Leaky ReLU); 0.0 gives standard ReLU. Should be in [0, 1].",\n      "maximum": 1,\n      "minimum": 0,\n      "type": "number"\n    },\n    "name": {\n      "description": "Optional name for the Function; auto-assigned by FunctionRegistry if omitted.",\n      "type": "string"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Constant added to the final result after scale. Default 0.0.",\n      "type": "number"\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplier applied to the rectified result before offset is added. Default 1.0.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nPass each parameter as a flat top-level keyword (e.g. `{"gain": 2.0, "bias": 0.1}`). Do NOT wrap them in an `args` / `kwargs` envelope — ReLU\'s constructor rejects an `args` keyword with `ComponentError: Illegal argument in constructor (type: ReLU): \'args\'` (see feedback issue #27). `params`, `owner`, and `prefs` are intentionally omitted; supply parameter overrides directly via the named arguments above. `leak` outside [0, 1] is not enforced by PNL but is mathematically nonstandard. The returned object is a Function instance; to actually compute values, hand it to a Mechanism or call it inside a Composition rather than expecting a numeric output here.'
+TOOL_PARAMETERS = { 'properties': { 'bias': { 'default': 0,
+                            'description': 'Threshold subtracted from each element of '
+                                           'variable before gain. Default 0.0.',
                             'type': 'number'},
-                  'default_variable': { 'description': 'Template for the value to be '
-                                                       'transformed; a scalar or array '
-                                                       'shape that fixes the '
-                                                       "function's input shape. "
-                                                       'Optional.',
-                                        'oneOf': [ {'type': 'number'},
-                                                   { 'items': {'type': 'number'},
-                                                     'type': 'array'},
-                                                   { 'items': { 'items': { 'type': 'number'},
-                                                                'type': 'array'},
-                                                     'type': 'array'}]},
-                  'gain': { 'description': 'Multiplier applied to (variable - bias) '
-                                           'before the max/leak step. Default 1.0.',
+                  'default_variable': { 'description': 'Template value/array shape to '
+                                                       'be transformed; defaults to '
+                                                       'the class default scalar.',
+                                        'items': {'type': 'number'},
+                                        'type': ['number', 'array']},
+                  'gain': { 'default': 1,
+                            'description': 'Multiplier applied to (variable - bias). '
+                                           'Default 1.0.',
                             'type': 'number'},
-                  'leak': { 'description': 'Slope on the negative side of the hinge. '
-                                           '0.0 gives a standard ReLU; values in (0, '
-                                           '1] give a Leaky ReLU. Default 0.0.',
+                  'leak': { 'default': 0,
+                            'description': 'Slope for the negative side (Leaky ReLU); '
+                                           '0.0 gives standard ReLU. Should be in [0, '
+                                           '1].',
+                            'maximum': 1,
+                            'minimum': 0,
                             'type': 'number'},
-                  'name': { 'description': 'Optional name for the Function instance; '
-                                           'FunctionRegistry assigns a default if '
+                  'name': { 'description': 'Optional name for the Function; '
+                                           'auto-assigned by FunctionRegistry if '
                                            'omitted.',
                             'type': 'string'},
-                  'offset': { 'description': 'Constant added after scale is applied. '
-                                             'Default 0.0.',
+                  'offset': { 'default': 0,
+                              'description': 'Constant added to the final result after '
+                                             'scale. Default 0.0.',
                               'type': 'number'},
-                  'scale': { 'description': 'Multiplier applied to the rectified value '
-                                            'before offset is added. Default 1.0.',
+                  'scale': { 'default': 1,
+                             'description': 'Multiplier applied to the rectified '
+                                            'result before offset is added. Default '
+                                            '1.0.',
                              'type': 'number'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = 'Pass parameters as flat top-level keyword arguments (e.g. {"gain": 2.0, "leak": 0.1}). Do NOT wrap them under an "args" or "kwargs" key — ReLU\'s constructor rejects an unknown `args` argument with `ComponentError: Illegal argument in constructor (type: ReLU): \'args\'` (this exact error has been observed in feedback). The tool returns a ReLU Function object, not a numeric output; to evaluate it, attach it to a Mechanism or call it as a callable. `leak` is conventionally between 0 and 1 — values outside that range are accepted by the constructor but are not standard Leaky ReLU. `gain` and `bias` are also exposed as the MULTIPLICATIVE_PARAM and ADDITIVE_PARAM aliases respectively, which matters if the function is being modulated by a ControlSignal.'
+TOOL_NOTES = 'Pass each parameter as a flat top-level keyword (e.g. `{"gain": 2.0, "bias": 0.1}`). Do NOT wrap them in an `args` / `kwargs` envelope — ReLU\'s constructor rejects an `args` keyword with `ComponentError: Illegal argument in constructor (type: ReLU): \'args\'` (see feedback issue #27). `params`, `owner`, and `prefs` are intentionally omitted; supply parameter overrides directly via the named arguments above. `leak` outside [0, 1] is not enforced by PNL but is mathematically nonstandard. The returned object is a Function instance; to actually compute values, hand it to a Mechanism or call it inside a Composition rather than expecting a numeric output here.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -90,5 +91,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_re_lu(args: dict[str, Any] | None = None) -> Any:
-        'Construct a PsyNeuLink ReLU transfer function — a rectified-linear (optionally leaky) DeterministicTransferFunction.'
+        'Construct a PsyNeuLink ReLU transfer function — a rectified linear (optionally leaky) activation that maps `x = gain * (variable - bias)` to `scale * max(x, leak * x) + offset`.'
         return _impl(args or {})

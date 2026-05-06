@@ -13,92 +13,124 @@ from psyneulink_mcp.feedback import captured_tool
 __source_sha256__ = '5e251c67921a291bd9bc38725c6a38a8b4ff5438ce8f609ae14d47df83d81856'
 __pnl_qualname__ = 'psyneulink.library.components.mechanisms.processing.transfer.recurrenttransfermechanism.TransferMechanism'
 __pnl_kind__ = 'class'
+__pnl_parents__ = ['ProcessingMechanism_Base',
+ 'Mechanism_Base',
+ 'Mechanism',
+ 'ShellClass',
+ 'Component',
+ 'MDFSerializable']
+__pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebebf1411a7f545b9c48a3eaeec3',
+ 'MDFSerializable': 'caad6059e8ef158be1269a23127f13da3733824c3585f9b4d6e3a63de82f65da',
+ 'Mechanism': 'ed9f10960d87126524669ea7084cb8128621de90ddb7306c8c9bde15f524d28d',
+ 'Mechanism_Base': '91d72ef88b0cb638b5895df2f04ed7f449ce951198c10e44c22558b699e8bf21',
+ 'ProcessingMechanism_Base': '471c65452d591ff8e0270afdeb8e535a0f97b3b23673c7bc21e9c32a6524cf80',
+ 'ShellClass': 'adc23754ebeb0c55bdde1324622b33a509116703503508ee7e7de181a8afeee6'}
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_transfer_mechanism'
-TOOL_DESCRIPTION = 'Call this tool to create a PsyNeuLink TransferMechanism — a processing node that applies a transfer function (e.g., Linear, Logistic, ReLU) to its input, optionally with temporal integration via a leaky integrator. Returns a TransferMechanism handle that can be added to a Composition. Use this when you need a neuron-like unit that transforms activation values, with or without temporal dynamics. All parameters must be passed as direct top-level keyword arguments — never wrap them inside an "args" key.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "clip": {\n      "description": "Two-element [min, max] bounds applied elementwise to the output after the transfer function. Omit or null for no clipping.",\n      "items": {\n        "type": "number"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "default_variable": {\n      "description": "Input template as a 2D list-of-lists, e.g. [[0, 0, 0]] for a single 3-element input port. MUTUALLY EXCLUSIVE with input_shapes \\u2014 do not pass both. Use input_shapes instead when you only need to specify size.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "function": {\n      "description": "Name of the transfer function to apply. Common values: \'Linear\' (default), \'Logistic\', \'ReLU\', \'Tanh\', \'SoftMax\'. Must be a TransferFunction or SelectionFunction name string.",\n      "type": "string"\n    },\n    "initial_value": {\n      "description": "Starting value for the integrator when integrator_mode=True. Must be a 2D list with the same shape as default_variable.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Shorthand to set input size: integer N creates one input port of size N. MUTUALLY EXCLUSIVE with default_variable \\u2014 do not pass both.",\n      "type": "integer"\n    },\n    "integration_rate": {\n      "description": "Rate of integration in [0, 1] when integrator_mode=True. Higher values integrate faster (0.5 = equal blend). Default 0.5.",\n      "type": "number"\n    },\n    "integrator_mode": {\n      "description": "If true, input is integrated via integrator_function before the transfer function is applied, enabling temporal/leaky-integration dynamics. Default false.",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Identifier for this mechanism within a Composition.",\n      "type": "string"\n    },\n    "noise": {\n      "description": "Scalar added to the function output (or forwarded to the integrator when integrator_mode=True). Default 0.0.",\n      "type": "number"\n    },\n    "on_resume_integrator_mode": {\n      "description": "How to seed the integrator when resuming integrator_mode=True. Default \'CURRENT_VALUE\'.",\n      "enum": [\n        "CURRENT_VALUE",\n        "LAST_INTEGRATED_VALUE",\n        "RESET"\n      ],\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "Output port specifications. Default [\'RESULTS\'] generates one port per input port. Include \'COMBINE\' for an elementwise-sum port across all value items.",\n      "items": {\n        "type": "string"\n      },\n      "type": "array"\n    },\n    "termination_comparison_op": {\n      "description": "Comparison operator for termination: compares termination_measure_value against termination_threshold. Default \'<=\'.",\n      "enum": [\n        "<",\n        "<=",\n        ">",\n        ">=",\n        "==",\n        "!="\n      ],\n      "type": "string"\n    },\n    "termination_threshold": {\n      "description": "If set (with execute_until_finished=True on the Composition run), execution repeats until termination_measure_value satisfies this threshold. Default null (single-pass).",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL — do NOT nest arguments inside an \'args\' key. All parameters must be passed as flat top-level keyword arguments. Passing {"args": {"name": "foo", ...}} is wrong and causes "Illegal argument in constructor: \'args\'".\n\nCRITICAL — input_shapes and default_variable are mutually exclusive. Passing both causes ComponentError ("input_shapes and default_variable conflict"). Use input_shapes=N (integer) as the simple shorthand. Use default_variable only when you need multiple input ports or an exact initial value template.\n\ndefault_variable must be a 2D list (list of lists). For a single input port of size 3: [[0, 0, 0]]. A 1D list [[0]] has shape (1,1) — only a single scalar element.\n\nfunction must be a string name (\'Linear\', \'Logistic\', \'ReLU\', etc.), not a dict or object.\n\nintegration_rate must be a float in [0, 1]; values outside this range are rejected by PNL.\n\ntermination_threshold only has an effect when execute_until_finished=True is passed to the Composition.run() call; without it, the mechanism always runs exactly once per trial.'
-TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': 'Two-element [min, max] bounds applied '
-                                           'elementwise to the output after the '
-                                           'transfer function. Omit or null for no '
-                                           'clipping.',
-                            'items': {'type': 'number'},
+TOOL_DESCRIPTION = 'Create a TransferMechanism — the standard PNL processing node for a simple element-wise transform of its input (e.g., Linear, Logistic, ReLU, Tanh). Use this as the default building block for non-recurrent layers in a Composition; reach for it whenever you need "apply f(x) to a vector, optionally with integration over time, noise, or clipping". Returns a Mechanism handle to wire into a Composition via projections. Adds to ProcessingMechanism_Base/Mechanism_Base: the integrator_mode toggle (run input through an IntegratorFunction before the primary function), noise injection, clip range, and a termination_measure/threshold pair for execute-until-finished semantics.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "clip": {\n      "description": "Two-element [min, max] tuple/list bounding the function output element-wise. Either entry may be null to disable that side. min must be < max.",\n      "items": {\n        "anyOf": [\n          {\n            "type": "number"\n          },\n          {\n            "type": "null"\n          }\n        ]\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "default_variable": {\n      "anyOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {},\n          "type": "array"\n        }\n      ],\n      "description": "Template for the input shape (number/list/2-D list). Use this OR input_shapes, not both. Pass the actual array shape the mechanism should accept (e.g., [0]*80 for an 80-dim layer)."\n    },\n    "function": {\n      "description": "Primary transfer function applied to (possibly integrated) input. Pass either a Function CLASS (e.g., \'Linear\', \'Logistic\', \'ReLU\', \'Tanh\') OR an instance whose default_variable matches the mechanism\'s input shape. Defaults to Linear. See notes about shape compatibility."\n    },\n    "initial_value": {\n      "description": "Starting value for integration when integrator_mode is True; must broadcast to the mechanism\'s variable shape. Default None (zeros)."\n    },\n    "input_ports": {\n      "description": "Optional list of InputPort specifications (names, dicts, or existing InputPort/OutputPort/Mechanism handles).",\n      "items": {},\n      "type": "array"\n    },\n    "input_shapes": {\n      "anyOf": [\n        {\n          "minimum": 1,\n          "type": "integer"\n        },\n        {\n          "items": {\n            "minimum": 1,\n            "type": "integer"\n          },\n          "type": "array"\n        }\n      ],\n      "description": "Convenience for setting the input dimensionality when each element is scalar. Integer N means a single InputPort of length N; list of ints means one InputPort per entry. Use this OR default_variable."\n    },\n    "integration_rate": {\n      "default": 0.5,\n      "description": "Rate of integration when integrator_mode is True; must be in [0, 1] (higher = faster). Default 0.5.",\n      "maximum": 1,\n      "minimum": 0,\n      "type": "number"\n    },\n    "integrator_function": {\n      "description": "IntegratorFunction class or instance used when integrator_mode is True. Defaults to AdaptiveIntegrator."\n    },\n    "integrator_mode": {\n      "default": false,\n      "description": "If True, run input through integrator_function before the primary function (leaky integration / time integration). Default False.",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Human-readable name for this Mechanism; used in Compositions and error messages.",\n      "type": "string"\n    },\n    "noise": {\n      "description": "Scalar, function (DistributionFunction for stochastic noise), list, or array. Added to function input when integrator_mode is False, otherwise passed to integrator_function. Default 0.0. If specified as scalar/function in constructor, cannot later be set to a list/array (and vice versa)."\n    },\n    "on_resume_integrator_mode": {\n      "default": "CURRENT_VALUE",\n      "description": "What value to use when integration is resumed after being paused.",\n      "enum": [\n        "CURRENT_VALUE",\n        "LAST_INTEGRATED_VALUE",\n        "RESET"\n      ],\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "OutputPort spec(s). Default \'RESULTS\' yields one OutputPort per InputPort. The keyword \'COMBINE\' adds an element-wise sum of all value items."\n    },\n    "params": {\n      "description": "Optional dict of additional parameters (advanced; usually leave unset).",\n      "type": "object"\n    },\n    "termination_comparison_op": {\n      "default": "<=",\n      "description": "Comparator used between termination_measure_value and termination_threshold.",\n      "enum": [\n        "<",\n        "<=",\n        ">",\n        ">=",\n        "==",\n        "!="\n      ],\n      "type": "string"\n    },\n    "termination_measure": {\n      "description": "Function or TimeScale used to decide when execute_until_finished stops. If a function, it is passed (value, previous_value). Default Distance(metric=MAX_ABS_DIFF)."\n    },\n    "termination_threshold": {\n      "anyOf": [\n        {\n          "type": "number"\n        },\n        {\n          "type": "null"\n        }\n      ],\n      "default": null,\n      "description": "Float compared with termination_measure\'s output via termination_comparison_op to decide is_finished. None disables threshold-based termination."\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nSHAPE GOTCHA (recent feedback issue #28): if you pass `function` as an *instance* (e.g., a ReLU created earlier with its default variable [[0]]) AND set `input_shapes`/`default_variable` to something larger (e.g., 80), you\'ll get `ComponentError: Variable format ([[0]]) of ReLU Function-0 is not compatible with the variable format ([[0,...]]) of \'<name>\'`. Two safe patterns: (1) pass the function as a CLASS (e.g., function=ReLU) so it auto-shapes to the mechanism\'s variable, or (2) construct the function instance with default_variable matching the mechanism\'s input shape. Do NOT reuse the same function instance across mechanisms with different input dimensionalities.\n\nOther caveats:\n- `default_variable` and `input_shapes` are mutually exclusive — use one.\n- `noise`\'s "shape commitment" is sticky: scalar/function at construction → can\'t later become list/array (and vice versa). Use a DistributionFunction for stochastic per-element-per-step noise; a plain float is just a constant offset.\n- `integration_rate` must be in [0, 1]; out-of-range values raise.\n- `clip` requires min < max and exactly two entries (each may be None to disable that side).\n- `termination_threshold=None` disables execute_until_finished termination entirely.\n- When the primary function returns an array, `clip` is applied element-wise.\n- When `integrator_mode=False`, `integrator_function`, `initial_value`, `integration_rate`, and `on_resume_integrator_mode` have no effect at runtime.\n- Returned object is a Mechanism — feed it to a Composition (add_node / projections); this tool does not run anything.'
+TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': 'Two-element [min, max] tuple/list bounding '
+                                           'the function output element-wise. Either '
+                                           'entry may be null to disable that side. '
+                                           'min must be < max.',
+                            'items': {'anyOf': [{'type': 'number'}, {'type': 'null'}]},
                             'maxItems': 2,
                             'minItems': 2,
                             'type': 'array'},
-                  'default_variable': { 'description': 'Input template as a 2D '
-                                                       'list-of-lists, e.g. [[0, 0, '
-                                                       '0]] for a single 3-element '
-                                                       'input port. MUTUALLY EXCLUSIVE '
-                                                       'with input_shapes — do not '
-                                                       'pass both. Use input_shapes '
-                                                       'instead when you only need to '
-                                                       'specify size.',
-                                        'items': { 'items': {'type': 'number'},
-                                                   'type': 'array'},
-                                        'type': 'array'},
-                  'function': { 'description': 'Name of the transfer function to '
-                                               "apply. Common values: 'Linear' "
-                                               "(default), 'Logistic', 'ReLU', 'Tanh', "
-                                               "'SoftMax'. Must be a TransferFunction "
-                                               'or SelectionFunction name string.',
-                                'type': 'string'},
-                  'initial_value': { 'description': 'Starting value for the integrator '
-                                                    'when integrator_mode=True. Must '
-                                                    'be a 2D list with the same shape '
-                                                    'as default_variable.',
-                                     'items': { 'items': {'type': 'number'},
-                                                'type': 'array'},
-                                     'type': 'array'},
-                  'input_shapes': { 'description': 'Shorthand to set input size: '
-                                                   'integer N creates one input port '
-                                                   'of size N. MUTUALLY EXCLUSIVE with '
-                                                   'default_variable — do not pass '
-                                                   'both.',
-                                    'type': 'integer'},
-                  'integration_rate': { 'description': 'Rate of integration in [0, 1] '
-                                                       'when integrator_mode=True. '
-                                                       'Higher values integrate faster '
-                                                       '(0.5 = equal blend). Default '
-                                                       '0.5.',
+                  'default_variable': { 'anyOf': [ {'type': 'number'},
+                                                   {'items': {}, 'type': 'array'}],
+                                        'description': 'Template for the input shape '
+                                                       '(number/list/2-D list). Use '
+                                                       'this OR input_shapes, not '
+                                                       'both. Pass the actual array '
+                                                       'shape the mechanism should '
+                                                       'accept (e.g., [0]*80 for an '
+                                                       '80-dim layer).'},
+                  'function': { 'description': 'Primary transfer function applied to '
+                                               '(possibly integrated) input. Pass '
+                                               'either a Function CLASS (e.g., '
+                                               "'Linear', 'Logistic', 'ReLU', 'Tanh') "
+                                               'OR an instance whose default_variable '
+                                               "matches the mechanism's input shape. "
+                                               'Defaults to Linear. See notes about '
+                                               'shape compatibility.'},
+                  'initial_value': { 'description': 'Starting value for integration '
+                                                    'when integrator_mode is True; '
+                                                    "must broadcast to the mechanism's "
+                                                    'variable shape. Default None '
+                                                    '(zeros).'},
+                  'input_ports': { 'description': 'Optional list of InputPort '
+                                                  'specifications (names, dicts, or '
+                                                  'existing '
+                                                  'InputPort/OutputPort/Mechanism '
+                                                  'handles).',
+                                   'items': {},
+                                   'type': 'array'},
+                  'input_shapes': { 'anyOf': [ {'minimum': 1, 'type': 'integer'},
+                                               { 'items': { 'minimum': 1,
+                                                            'type': 'integer'},
+                                                 'type': 'array'}],
+                                    'description': 'Convenience for setting the input '
+                                                   'dimensionality when each element '
+                                                   'is scalar. Integer N means a '
+                                                   'single InputPort of length N; list '
+                                                   'of ints means one InputPort per '
+                                                   'entry. Use this OR '
+                                                   'default_variable.'},
+                  'integration_rate': { 'default': 0.5,
+                                        'description': 'Rate of integration when '
+                                                       'integrator_mode is True; must '
+                                                       'be in [0, 1] (higher = '
+                                                       'faster). Default 0.5.',
+                                        'maximum': 1,
+                                        'minimum': 0,
                                         'type': 'number'},
-                  'integrator_mode': { 'description': 'If true, input is integrated '
-                                                      'via integrator_function before '
-                                                      'the transfer function is '
-                                                      'applied, enabling '
-                                                      'temporal/leaky-integration '
-                                                      'dynamics. Default false.',
+                  'integrator_function': { 'description': 'IntegratorFunction class or '
+                                                          'instance used when '
+                                                          'integrator_mode is True. '
+                                                          'Defaults to '
+                                                          'AdaptiveIntegrator.'},
+                  'integrator_mode': { 'default': False,
+                                       'description': 'If True, run input through '
+                                                      'integrator_function before the '
+                                                      'primary function (leaky '
+                                                      'integration / time '
+                                                      'integration). Default False.',
                                        'type': 'boolean'},
-                  'name': { 'description': 'Identifier for this mechanism within a '
-                                           'Composition.',
+                  'name': { 'description': 'Human-readable name for this Mechanism; '
+                                           'used in Compositions and error messages.',
                             'type': 'string'},
-                  'noise': { 'description': 'Scalar added to the function output (or '
-                                            'forwarded to the integrator when '
-                                            'integrator_mode=True). Default 0.0.',
-                             'type': 'number'},
-                  'on_resume_integrator_mode': { 'description': 'How to seed the '
-                                                                'integrator when '
-                                                                'resuming '
-                                                                'integrator_mode=True. '
-                                                                'Default '
-                                                                "'CURRENT_VALUE'.",
+                  'noise': { 'description': 'Scalar, function (DistributionFunction '
+                                            'for stochastic noise), list, or array. '
+                                            'Added to function input when '
+                                            'integrator_mode is False, otherwise '
+                                            'passed to integrator_function. Default '
+                                            '0.0. If specified as scalar/function in '
+                                            'constructor, cannot later be set to a '
+                                            'list/array (and vice versa).'},
+                  'on_resume_integrator_mode': { 'default': 'CURRENT_VALUE',
+                                                 'description': 'What value to use '
+                                                                'when integration is '
+                                                                'resumed after being '
+                                                                'paused.',
                                                  'enum': [ 'CURRENT_VALUE',
                                                            'LAST_INTEGRATED_VALUE',
                                                            'RESET'],
                                                  'type': 'string'},
-                  'output_ports': { 'description': 'Output port specifications. '
-                                                   "Default ['RESULTS'] generates one "
-                                                   'port per input port. Include '
-                                                   "'COMBINE' for an elementwise-sum "
-                                                   'port across all value items.',
-                                    'items': {'type': 'string'},
-                                    'type': 'array'},
-                  'termination_comparison_op': { 'description': 'Comparison operator '
-                                                                'for termination: '
-                                                                'compares '
+                  'output_ports': { 'description': 'OutputPort spec(s). Default '
+                                                   "'RESULTS' yields one OutputPort "
+                                                   'per InputPort. The keyword '
+                                                   "'COMBINE' adds an element-wise sum "
+                                                   'of all value items.'},
+                  'params': { 'description': 'Optional dict of additional parameters '
+                                             '(advanced; usually leave unset).',
+                              'type': 'object'},
+                  'termination_comparison_op': { 'default': '<=',
+                                                 'description': 'Comparator used '
+                                                                'between '
                                                                 'termination_measure_value '
-                                                                'against '
-                                                                'termination_threshold. '
-                                                                "Default '<='.",
+                                                                'and '
+                                                                'termination_threshold.',
                                                  'enum': [ '<',
                                                            '<=',
                                                            '>',
@@ -106,18 +138,27 @@ TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': 'Two-element [min, 
                                                            '==',
                                                            '!='],
                                                  'type': 'string'},
-                  'termination_threshold': { 'description': 'If set (with '
-                                                            'execute_until_finished=True '
-                                                            'on the Composition run), '
-                                                            'execution repeats until '
-                                                            'termination_measure_value '
-                                                            'satisfies this threshold. '
-                                                            'Default null '
-                                                            '(single-pass).',
-                                             'type': 'number'}},
+                  'termination_measure': { 'description': 'Function or TimeScale used '
+                                                          'to decide when '
+                                                          'execute_until_finished '
+                                                          'stops. If a function, it is '
+                                                          'passed (value, '
+                                                          'previous_value). Default '
+                                                          'Distance(metric=MAX_ABS_DIFF).'},
+                  'termination_threshold': { 'anyOf': [ {'type': 'number'},
+                                                        {'type': 'null'}],
+                                             'default': None,
+                                             'description': 'Float compared with '
+                                                            "termination_measure's "
+                                                            'output via '
+                                                            'termination_comparison_op '
+                                                            'to decide is_finished. '
+                                                            'None disables '
+                                                            'threshold-based '
+                                                            'termination.'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = 'CRITICAL — do NOT nest arguments inside an \'args\' key. All parameters must be passed as flat top-level keyword arguments. Passing {"args": {"name": "foo", ...}} is wrong and causes "Illegal argument in constructor: \'args\'".\n\nCRITICAL — input_shapes and default_variable are mutually exclusive. Passing both causes ComponentError ("input_shapes and default_variable conflict"). Use input_shapes=N (integer) as the simple shorthand. Use default_variable only when you need multiple input ports or an exact initial value template.\n\ndefault_variable must be a 2D list (list of lists). For a single input port of size 3: [[0, 0, 0]]. A 1D list [[0]] has shape (1,1) — only a single scalar element.\n\nfunction must be a string name (\'Linear\', \'Logistic\', \'ReLU\', etc.), not a dict or object.\n\nintegration_rate must be a float in [0, 1]; values outside this range are rejected by PNL.\n\ntermination_threshold only has an effect when execute_until_finished=True is passed to the Composition.run() call; without it, the mechanism always runs exactly once per trial.'
+TOOL_NOTES = 'SHAPE GOTCHA (recent feedback issue #28): if you pass `function` as an *instance* (e.g., a ReLU created earlier with its default variable [[0]]) AND set `input_shapes`/`default_variable` to something larger (e.g., 80), you\'ll get `ComponentError: Variable format ([[0]]) of ReLU Function-0 is not compatible with the variable format ([[0,...]]) of \'<name>\'`. Two safe patterns: (1) pass the function as a CLASS (e.g., function=ReLU) so it auto-shapes to the mechanism\'s variable, or (2) construct the function instance with default_variable matching the mechanism\'s input shape. Do NOT reuse the same function instance across mechanisms with different input dimensionalities.\n\nOther caveats:\n- `default_variable` and `input_shapes` are mutually exclusive — use one.\n- `noise`\'s "shape commitment" is sticky: scalar/function at construction → can\'t later become list/array (and vice versa). Use a DistributionFunction for stochastic per-element-per-step noise; a plain float is just a constant offset.\n- `integration_rate` must be in [0, 1]; out-of-range values raise.\n- `clip` requires min < max and exactly two entries (each may be None to disable that side).\n- `termination_threshold=None` disables execute_until_finished termination entirely.\n- When the primary function returns an array, `clip` is applied element-wise.\n- When `integrator_mode=False`, `integrator_function`, `initial_value`, `integration_rate`, and `on_resume_integrator_mode` have no effect at runtime.\n- Returned object is a Mechanism — feed it to a Composition (add_node / projections); this tool does not run anything.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -142,5 +183,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_transfer_mechanism(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to create a PsyNeuLink TransferMechanism — a processing node that applies a transfer function (e.g., Linear, Logistic, ReLU) to its input, optionally with temporal integration via a leaky integrator.'
+        'Create a TransferMechanism — the standard PNL processing node for a simple element-wise transform of its input (e.g., Linear, Logistic, ReLU, Tanh).'
         return _impl(args or {})

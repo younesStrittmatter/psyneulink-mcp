@@ -19,81 +19,77 @@ __pnl_parent_sha256s__ = {}
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'add_projection'
-TOOL_DESCRIPTION = 'Wire a Projection (typically a MappingProjection) between two nodes already conceivable in a Composition: call this when you need to add an explicit connection that wasn\'t created by a pathway, override a default matrix, mark a connection as feedback (cycle-breaking), or attach a pre-built Projection instance. The runtime helper defensively adds `sender` and `receiver` to the composition first, so you do NOT need to call add_node beforehand. Returns the resulting Projection handle (or a no-op success marker if PNL flags the wiring as a duplicate, which the helper treats as a benign retry).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle of the Composition that should own the new Projection (returned by create_composition or the analogous constructor).",\n      "type": "string"\n    },\n    "default_matrix": {\n      "anyOf": [\n        {\n          "type": "string"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ],\n      "description": "Matrix used to build the default MappingProjection when `projection` is not given and no Projection already exists between sender and receiver. Pass either a 2-D numeric array (rows = sender output size, cols = receiver input size) OR one of PNL\'s matrix keyword strings: \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\', \'HOLLOW_MATRIX\', \'RANDOM_CONNECTIVITY_MATRIX\', \'AUTO_ASSOCIATIVE_MATRIX\', \'INVERSE_HOLLOW_MATRIX\'. NOTE: the underlying PNL kwarg is `default_matrix`, not `matrix` \\u2014 passing `matrix` to a free-standing MappingProjection trips a parameter-port bug, so always specify the matrix here."\n    },\n    "feedback": {\n      "default": false,\n      "description": "If True, the Projection is always designated as a feedback Projection used to break cycles in the Composition\'s graph. If False (default), it is never designated as feedback even when it closes a loop. Use this to control cycle resolution explicitly.",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Optional human-readable name for the new Projection.",\n      "type": "string"\n    },\n    "projection": {\n      "description": "Optional handle of an already-constructed Projection (e.g. a MappingProjection or ControlProjection). If omitted, a default MappingProjection is created between sender and receiver using `default_matrix`. If both this and sender/receiver are given, they must agree with the Projection\'s own sender/receiver.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Handle of the target node \\u2014 a Mechanism, a (nested) Composition, or an InputPort. Pass the OBJECT handle, not a port-name string and not a {\'mechanism\': ..., \'input_port\': ...} dict (both forms trip a PNL UnboundLocalError). To target a specific InputPort of a Mechanism, first obtain a handle to that InputPort via the Mechanism\'s input_ports and pass that handle here.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Handle of the source node \\u2014 a Mechanism, a (nested) Composition, or an OutputPort. Pass the OBJECT handle, not a port-name string.",\n      "type": "string"\n    }\n  },\n  "required": [\n    "composition",\n    "sender",\n    "receiver"\n  ],\n  "type": "object"\n}\n\nNotes:\nReceiver/sender forms that fail: passing an InputPort name as a bare string (e.g. \'FIELD_1_INPUT\' or \'EM[FIELD_1_INPUT]\') or as a dict {\'mechanism\': ..., \'input_port\': ...} causes PsyNeuLink to raise `UnboundLocalError: cannot access local variable \'receiver_ports\'`. Always pass an OBJECT handle — a Mechanism, a Composition, an InputPort, or an OutputPort. To target a specific port, fetch its handle via the Mechanism\'s input_ports/output_ports, then pass that handle.\n\nThe runtime helper auto-adds `sender` and `receiver` to the Composition before dispatching (PNL no-ops if either is already a node), so callers do not need to call add_node first; PNL\'s `CompositionError: ... not (yet) in it` should not occur. The helper also turns `DuplicateProjectionError` into a no-op success — re-issuing add_projection for an existing wiring is safe and idempotent.\n\nUse `default_matrix` (NOT `matrix`) for the matrix specification; the PNL kwarg name on the bound method is `default_matrix`, and the helper accepts either alias and forwards it as `default_matrix`. Matrix dimensions must be (sender_output_size × receiver_input_size); IDENTITY_MATRIX requires equal sizes. Returns the resulting Projection (or None when the helper short-circuits a duplicate); when more than one matching Projection already exists outside the Composition, PNL adopts the most recent one and emits a verbose warning. The `is_learning_projection`, `allow_duplicates`, and `context` parameters of the underlying method are managed by the runtime and intentionally not exposed.'
-TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle of the Composition that '
-                                                  'should own the new Projection '
-                                                  '(returned by create_composition or '
-                                                  'the analogous constructor).',
+TOOL_DESCRIPTION = 'Wire one node to another inside an existing Composition by adding a Projection between a sender and a receiver. Call this after creating both endpoint handles (Mechanisms or nested Compositions) when you need explicit connectivity beyond what a pathway-based constructor provides; you do NOT need to pre-add the endpoints with add_node — the runtime ensures both are members of the composition before wiring. Returns nothing meaningful to the agent (the live Projection stays inside PNL); a successful call means the edge exists.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle of the Composition to add the projection into, as returned by a Composition-creating tool.",\n      "type": "string"\n    },\n    "default_matrix": {\n      "description": "Weight matrix used when auto-creating a default MappingProjection (ignored if `projection` is given). Either a 2-D numeric array shaped (sender_size, receiver_size), or a PNL matrix-keyword string: \'IDENTITY_MATRIX\', \'FULL_CONNECTIVITY_MATRIX\', \'HOLLOW_MATRIX\', \'RANDOM_CONNECTIVITY_MATRIX\', \'INVERSE_HOLLOW_MATRIX\', \'AUTO_ASSOCIATIVE_MATRIX\'. Pass this kwarg as `default_matrix` (NOT `matrix`); the helper also accepts the alias `matrix` and translates it.",\n      "oneOf": [\n        {\n          "type": "string"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "feedback": {\n      "default": false,\n      "description": "If True, force-mark this projection as a feedback edge that breaks cycles in the composition graph. Default False (PNL\'s normal cycle-detection rules apply).",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Optional human-readable name for the auto-created default Projection. Ignored when `projection` is supplied.",\n      "type": "string"\n    },\n    "projection": {\n      "description": "Optional handle of a pre-built Projection (e.g. a MappingProjection, ControlProjection, LearningProjection) to install. Omit to auto-create a default MappingProjection between sender and receiver.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Handle of the receiver Mechanism, nested Composition, or InputPort. The runtime resolves the string and adds it to the composition first. NOTE: if this resolves to a nested Composition with multiple INPUT nodes (e.g. an EMComposition with several QUERY fields), the projection is routed via the input_CIM to the FIRST INPUT node \\u2014 this tool has no parameter to pick a specific field/port. To target a specific field, pass the InputPort handle of the desired inner node directly as the receiver instead of the outer Composition handle.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Handle of the sender Mechanism, nested Composition, or OutputPort. The runtime resolves the string to the live PNL object and (defensively) adds it to the composition first.",\n      "type": "string"\n    }\n  },\n  "required": [\n    "composition",\n    "sender",\n    "receiver"\n  ],\n  "type": "object"\n}\n\nNotes:\n- The runtime helper defensively calls add_node for sender and receiver before wiring, so do not separately add_node first; a DuplicateProjectionError from PNL is treated as a no-op success, so retrying the same add_projection call is safe.\n- Use `default_matrix`, not `matrix`. PNL has a known parameter-port bug when `matrix` is passed directly to a free-standing MappingProjection; the helper avoids it by translating both names to PNL\'s `default_matrix` kwarg.\n- Matrix-keyword strings like \'IDENTITY_MATRIX\' must be uppercase and are case-sensitive; numeric arrays must be 2-D and dimensionally compatible with the sender\'s output and receiver\'s input sizes.\n- Nested-Composition receivers route through the input_CIM to the FIRST INPUT node found; there is no `receiver_port`/`target_field` argument here. For multi-input nested Compositions (e.g. EMComposition with several QUERY fields), pass the inner node\'s InputPort handle as `receiver` directly to disambiguate.\n- If a projection already exists between the same sender Port and receiver Port within the composition, the request is silently ignored and the existing edge is reused; if multiple exist outside the composition, the most recent one is adopted (a warning may be emitted).\n- ControlProjections and LearningProjections are accepted as `projection`, but ModulatoryProjection routing differs from MappingProjection — pass a fully constructed projection handle if you need non-default modulatory behavior.'
+TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle of the Composition to add '
+                                                  'the projection into, as returned by '
+                                                  'a Composition-creating tool.',
                                    'type': 'string'},
-                  'default_matrix': { 'anyOf': [ {'type': 'string'},
-                                                 { 'items': { 'items': { 'type': 'number'},
-                                                              'type': 'array'},
-                                                   'type': 'array'}],
-                                      'description': 'Matrix used to build the default '
-                                                     'MappingProjection when '
-                                                     '`projection` is not given and no '
-                                                     'Projection already exists '
-                                                     'between sender and receiver. '
-                                                     'Pass either a 2-D numeric array '
-                                                     '(rows = sender output size, cols '
-                                                     '= receiver input size) OR one of '
-                                                     "PNL's matrix keyword strings: "
+                  'default_matrix': { 'description': 'Weight matrix used when '
+                                                     'auto-creating a default '
+                                                     'MappingProjection (ignored if '
+                                                     '`projection` is given). Either a '
+                                                     '2-D numeric array shaped '
+                                                     '(sender_size, receiver_size), or '
+                                                     'a PNL matrix-keyword string: '
                                                      "'IDENTITY_MATRIX', "
                                                      "'FULL_CONNECTIVITY_MATRIX', "
                                                      "'HOLLOW_MATRIX', "
                                                      "'RANDOM_CONNECTIVITY_MATRIX', "
-                                                     "'AUTO_ASSOCIATIVE_MATRIX', "
-                                                     "'INVERSE_HOLLOW_MATRIX'. NOTE: "
-                                                     'the underlying PNL kwarg is '
-                                                     '`default_matrix`, not `matrix` — '
-                                                     'passing `matrix` to a '
-                                                     'free-standing MappingProjection '
-                                                     'trips a parameter-port bug, so '
-                                                     'always specify the matrix here.'},
+                                                     "'INVERSE_HOLLOW_MATRIX', "
+                                                     "'AUTO_ASSOCIATIVE_MATRIX'. Pass "
+                                                     'this kwarg as `default_matrix` '
+                                                     '(NOT `matrix`); the helper also '
+                                                     'accepts the alias `matrix` and '
+                                                     'translates it.',
+                                      'oneOf': [ {'type': 'string'},
+                                                 { 'items': { 'items': { 'type': 'number'},
+                                                              'type': 'array'},
+                                                   'type': 'array'}]},
                   'feedback': { 'default': False,
-                                'description': 'If True, the Projection is always '
-                                               'designated as a feedback Projection '
-                                               'used to break cycles in the '
-                                               "Composition's graph. If False "
-                                               '(default), it is never designated as '
-                                               'feedback even when it closes a loop. '
-                                               'Use this to control cycle resolution '
-                                               'explicitly.',
+                                'description': 'If True, force-mark this projection as '
+                                               'a feedback edge that breaks cycles in '
+                                               'the composition graph. Default False '
+                                               "(PNL's normal cycle-detection rules "
+                                               'apply).',
                                 'type': 'boolean'},
-                  'name': { 'description': 'Optional human-readable name for the new '
-                                           'Projection.',
+                  'name': { 'description': 'Optional human-readable name for the '
+                                           'auto-created default Projection. Ignored '
+                                           'when `projection` is supplied.',
                             'type': 'string'},
-                  'projection': { 'description': 'Optional handle of an '
-                                                 'already-constructed Projection (e.g. '
-                                                 'a MappingProjection or '
-                                                 'ControlProjection). If omitted, a '
-                                                 'default MappingProjection is created '
-                                                 'between sender and receiver using '
-                                                 '`default_matrix`. If both this and '
-                                                 'sender/receiver are given, they must '
-                                                 "agree with the Projection's own "
-                                                 'sender/receiver.',
+                  'projection': { 'description': 'Optional handle of a pre-built '
+                                                 'Projection (e.g. a '
+                                                 'MappingProjection, '
+                                                 'ControlProjection, '
+                                                 'LearningProjection) to install. Omit '
+                                                 'to auto-create a default '
+                                                 'MappingProjection between sender and '
+                                                 'receiver.',
                                   'type': 'string'},
-                  'receiver': { 'description': 'Handle of the target node — a '
-                                               'Mechanism, a (nested) Composition, or '
-                                               'an InputPort. Pass the OBJECT handle, '
-                                               'not a port-name string and not a '
-                                               "{'mechanism': ..., 'input_port': ...} "
-                                               'dict (both forms trip a PNL '
-                                               'UnboundLocalError). To target a '
-                                               'specific InputPort of a Mechanism, '
-                                               'first obtain a handle to that '
-                                               "InputPort via the Mechanism's "
-                                               'input_ports and pass that handle here.',
+                  'receiver': { 'description': 'Handle of the receiver Mechanism, '
+                                               'nested Composition, or InputPort. The '
+                                               'runtime resolves the string and adds '
+                                               'it to the composition first. NOTE: if '
+                                               'this resolves to a nested Composition '
+                                               'with multiple INPUT nodes (e.g. an '
+                                               'EMComposition with several QUERY '
+                                               'fields), the projection is routed via '
+                                               'the input_CIM to the FIRST INPUT node '
+                                               '— this tool has no parameter to pick a '
+                                               'specific field/port. To target a '
+                                               'specific field, pass the InputPort '
+                                               'handle of the desired inner node '
+                                               'directly as the receiver instead of '
+                                               'the outer Composition handle.',
                                 'type': 'string'},
-                  'sender': { 'description': 'Handle of the source node — a Mechanism, '
-                                             'a (nested) Composition, or an '
-                                             'OutputPort. Pass the OBJECT handle, not '
-                                             'a port-name string.',
+                  'sender': { 'description': 'Handle of the sender Mechanism, nested '
+                                             'Composition, or OutputPort. The runtime '
+                                             'resolves the string to the live PNL '
+                                             'object and (defensively) adds it to the '
+                                             'composition first.',
                               'type': 'string'}},
   'required': ['composition', 'sender', 'receiver'],
   'type': 'object'}
-TOOL_NOTES = "Receiver/sender forms that fail: passing an InputPort name as a bare string (e.g. 'FIELD_1_INPUT' or 'EM[FIELD_1_INPUT]') or as a dict {'mechanism': ..., 'input_port': ...} causes PsyNeuLink to raise `UnboundLocalError: cannot access local variable 'receiver_ports'`. Always pass an OBJECT handle — a Mechanism, a Composition, an InputPort, or an OutputPort. To target a specific port, fetch its handle via the Mechanism's input_ports/output_ports, then pass that handle.\n\nThe runtime helper auto-adds `sender` and `receiver` to the Composition before dispatching (PNL no-ops if either is already a node), so callers do not need to call add_node first; PNL's `CompositionError: ... not (yet) in it` should not occur. The helper also turns `DuplicateProjectionError` into a no-op success — re-issuing add_projection for an existing wiring is safe and idempotent.\n\nUse `default_matrix` (NOT `matrix`) for the matrix specification; the PNL kwarg name on the bound method is `default_matrix`, and the helper accepts either alias and forwards it as `default_matrix`. Matrix dimensions must be (sender_output_size × receiver_input_size); IDENTITY_MATRIX requires equal sizes. Returns the resulting Projection (or None when the helper short-circuits a duplicate); when more than one matching Projection already exists outside the Composition, PNL adopts the most recent one and emits a verbose warning. The `is_learning_projection`, `allow_duplicates`, and `context` parameters of the underlying method are managed by the runtime and intentionally not exposed."
+TOOL_NOTES = "- The runtime helper defensively calls add_node for sender and receiver before wiring, so do not separately add_node first; a DuplicateProjectionError from PNL is treated as a no-op success, so retrying the same add_projection call is safe.\n- Use `default_matrix`, not `matrix`. PNL has a known parameter-port bug when `matrix` is passed directly to a free-standing MappingProjection; the helper avoids it by translating both names to PNL's `default_matrix` kwarg.\n- Matrix-keyword strings like 'IDENTITY_MATRIX' must be uppercase and are case-sensitive; numeric arrays must be 2-D and dimensionally compatible with the sender's output and receiver's input sizes.\n- Nested-Composition receivers route through the input_CIM to the FIRST INPUT node found; there is no `receiver_port`/`target_field` argument here. For multi-input nested Compositions (e.g. EMComposition with several QUERY fields), pass the inner node's InputPort handle as `receiver` directly to disambiguate.\n- If a projection already exists between the same sender Port and receiver Port within the composition, the request is silently ignored and the existing edge is reused; if multiple exist outside the composition, the most recent one is adopted (a warning may be emitted).\n- ControlProjections and LearningProjections are accepted as `projection`, but ModulatoryProjection routing differs from MappingProjection — pass a fully constructed projection handle if you need non-default modulatory behavior."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -109,5 +105,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def add_projection(args: dict[str, Any] | None = None) -> Any:
-        "Wire a Projection (typically a MappingProjection) between two nodes already conceivable in a Composition: call this when you need to add an explicit connection that wasn't created by a pathway, override a default matrix, mark a connection as feedback (cycle-breaking), or attach a pre-built Projection instance."
+        'Wire one node to another inside an existing Composition by adding a Projection between a sender and a receiver.'
         return _impl(args or {})
