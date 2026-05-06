@@ -118,11 +118,19 @@ def render_module(
     ]
     if symbol.kind == "method":
         lines.append("from psyneulink_mcp import method_helpers")
+    parent_short_names_literal = pprint.pformat(
+        list(symbol.parent_short_names), width=88
+    )
+    parent_sha_pairs_literal = pprint.pformat(
+        dict(symbol.parent_source_sha256s), sort_dicts=True, width=88
+    )
     lines += [
         "",
         f"__source_sha256__ = {symbol.source_sha256!r}",
         f"__pnl_qualname__ = {symbol.qualname!r}",
         f"__pnl_kind__ = {symbol.kind!r}",
+        f"__pnl_parents__ = {parent_short_names_literal}",
+        f"__pnl_parent_sha256s__ = {parent_sha_pairs_literal}",
         f"__generated_by__ = {generated_by!r}",
         "",
         f"TOOL_NAME = {tool_name!r}",

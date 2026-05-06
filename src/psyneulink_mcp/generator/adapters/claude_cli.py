@@ -68,11 +68,15 @@ class ClaudeCLIAdapter:
             else (int(env_timeout) if env_timeout else DEFAULT_TIMEOUT_S)
         )
 
-    def build_argv(self, schema: dict[str, Any]) -> list[str]:
+    def build_argv(
+        self, schema: dict[str, Any], *, model: str | None = None
+    ) -> list[str]:
         """Build the argv passed to ``subprocess.run``.
 
         Split out so tests can assert flag composition without mocking
-        the full subprocess invocation.
+        the full subprocess invocation. ``model`` overrides the
+        adapter's default for one call (used by the orchestrator's
+        opus-escalation logic).
         """
         argv = [
             self.cmd,
@@ -83,13 +87,19 @@ class ClaudeCLIAdapter:
             json.dumps(schema, separators=(",", ":")),
             "--no-session-persistence",
             "--model",
-            self.model,
+            model or self.model,
         ]
         if self.max_budget_usd is not None:
             argv += ["--max-budget-usd", str(self.max_budget_usd)]
         return argv
 
-    def generate(self, prompt: str, *, schema: dict[str, Any]) -> ToolSpec:
+    def generate(
+        self,
+        prompt: str,
+        *,
+        schema: dict[str, Any],
+        model: str | None = None,
+    ) -> ToolSpec:
         if shutil.which(self.cmd) is None:
             raise AdapterError(
                 f"`{self.cmd}` CLI not found on PATH. Install Claude Code from "
@@ -97,7 +107,7 @@ class ClaudeCLIAdapter:
                 f"${ENV_CLAUDE_CMD} to a full path to the binary."
             )
 
-        argv = self.build_argv(schema)
+        argv = self.build_argv(schema, model=model)
         try:
             result = subprocess.run(
                 argv,

@@ -30,6 +30,7 @@ pending feedback. ``--force`` bypasses the skip.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -69,6 +70,17 @@ DEFAULT_SEEDS_FILE = REPO_ROOT / "generator" / "seeds.txt"
 _SHA_LINE_RE = re.compile(
     r'^__source_sha256__\s*=\s*[\'"]([0-9a-f]+)[\'"]\s*$',
     re.MULTILINE,
+)
+
+# Matches the `__pnl_parent_sha256s__ = {...}` block. We literal-eval
+# the captured dict body to get the parent → SHA map for cascade
+# invalidation. Older generated modules (pre-Phase-3) don't carry this
+# field; their absence is treated as "no parent SHAs recorded → don't
+# cascade-invalidate" so the rollout stays gradual rather than
+# triggering a full 354-tool regen on first run after the upgrade.
+_PARENT_SHA_BLOCK_RE = re.compile(
+    r'^__pnl_parent_sha256s__\s*=\s*(\{.*?\})\s*$',
+    re.MULTILINE | re.DOTALL,
 )
 
 
@@ -143,6 +155,39 @@ def _existing_sha(generated_dir: Path, symbol: SymbolMeta) -> str | None:
     return match.group(1) if match else None
 
 
+def _existing_parent_sha256s(
+    generated_dir: Path, symbol: SymbolMeta
+) -> dict[str, str] | None:
+    """Read the recorded ``__pnl_parent_sha256s__`` map from the on-disk module.
+
+    Returns ``None`` when the file doesn't exist OR when it predates
+    Phase 3 (no ``__pnl_parent_sha256s__`` block) — in both cases the
+    caller treats the parent SHAs as untracked and skips cascade
+    invalidation. We literal-eval the captured block so a corrupted or
+    hand-edited file doesn't crash the generator (we just bail out and
+    let the regen proceed if other reasons demand it).
+    """
+    path = generated_dir / module_filename_for(symbol)
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = _PARENT_SHA_BLOCK_RE.search(text)
+    if not match:
+        return None
+    import ast
+
+    try:
+        value = ast.literal_eval(match.group(1))
+    except (ValueError, SyntaxError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    return {str(k): str(v) for k, v in value.items()}
+
+
 def _should_skip(
     symbol: SymbolMeta,
     generated_dir: Path,
@@ -151,7 +196,24 @@ def _should_skip(
     force: bool,
     dry_run: bool,
 ) -> bool:
-    """True when nothing changed and there's no pending feedback to address."""
+    """True when nothing changed and there's no pending feedback to address.
+
+    Checks, in order:
+
+    1. ``--force`` flag — never skip.
+    2. No committed file yet — never skip.
+    3. The symbol's own source SHA differs from the on-disk file → regen.
+    4. Pending feedback names this tool → regen.
+    5. **Cascade invalidation**: any of this class's PNL parent classes
+       has a different source SHA now than what was recorded when the
+       module was last generated → regen, because the parent docstring
+       included in the regen prompt has changed and the description
+       written against it is stale.
+
+    (5) only applies to modules generated post-Phase-3 (older ones have
+    no recorded parent SHAs and are left alone to keep the migration
+    gradual).
+    """
     if force:
         return False
     existing = _existing_sha(generated_dir, symbol)
@@ -161,6 +223,13 @@ def _should_skip(
         return False  # PNL source changed
     if feedback_by_tool.get(tool_name_for(symbol)):
         return False  # feedback is the whole reason to regen
+    recorded_parents = _existing_parent_sha256s(generated_dir, symbol)
+    if recorded_parents is not None:
+        current_parents = symbol.parent_source_sha256s_dict
+        for parent_name, current_sha in current_parents.items():
+            recorded_sha = recorded_parents.get(parent_name)
+            if recorded_sha is not None and recorded_sha != current_sha:
+                return False  # parent's PNL source changed → regen child
     if dry_run:
         # In dry-run mode we never overwrite an up-to-date file —
         # a no-LLM placeholder would actively destroy work.
@@ -293,6 +362,46 @@ def _augment_with_historical_failures(
     return augmented  # type: ignore[return-value]
 
 
+# Override for the model the orchestrator escalates "complicated"
+# symbols to. The intuition: the cheap default model handles the long
+# tail of straightforward PNL classes / functions just fine; the harder
+# cases — tools with active feedback to address, tools with closed
+# historical failures, methods (which have port-routing nuance the
+# template helper has to convey faithfully) — benefit from a stronger
+# model. Override via ``$PSYNEULINK_MCP_CLAUDE_MODEL_ESCALATED``.
+ENV_ESCALATED_MODEL = "PSYNEULINK_MCP_CLAUDE_MODEL_ESCALATED"
+DEFAULT_ESCALATED_MODEL = "opus"
+
+
+def _pick_model_for_symbol(
+    symbol: SymbolMeta,
+    feedback: list[dict[str, Any]],
+    historical_failures: list[dict[str, Any]],
+) -> str | None:
+    """Return an override model for ``symbol``, or ``None`` for the default.
+
+    Escalate to opus (or ``$PSYNEULINK_MCP_CLAUDE_MODEL_ESCALATED``)
+    whenever any of these holds:
+
+    * Pending feedback exists for this tool — addressing user-reported
+      problems is exactly the case where a stronger model pays off.
+    * Closed historical failures exist — the regen LLM has to write a
+      description that doesn't re-trigger the same closed bugs, which
+      benefits from longer reasoning.
+    * The symbol is a class with 4+ PNL parents — deep MRO chains
+      mean more inheritance to compress correctly.
+
+    Cheap default for everything else; opus for the stuff that breaks.
+    """
+    if feedback:
+        return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
+    if historical_failures:
+        return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
+    if symbol.kind == "class" and len(symbol.parent_short_names) >= 4:
+        return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
+    return None
+
+
 def _generate_one(
     symbol: SymbolMeta,
     feedback: list[dict[str, Any]],
@@ -305,7 +414,10 @@ def _generate_one(
         spec = _placeholder_spec(symbol)
     else:
         prompt = render_prompt(symbol, feedback)
-        spec = adapter.generate(prompt, schema=TOOL_SPEC_SCHEMA)
+        model_override = _pick_model_for_symbol(symbol, feedback, historical_failures)
+        spec = adapter.generate(
+            prompt, schema=TOOL_SPEC_SCHEMA, model=model_override
+        )
     spec = _augment_with_historical_failures(spec, historical_failures)
     return render_module(symbol, spec, generated_by=_generated_by(adapter, dry_run))
 
@@ -422,10 +534,19 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     mode = "dry-run" if args.dry_run else f"adapter {type(adapter).__name__}"
+    base_model = getattr(adapter, "model", None) if adapter else None
+    escalated_model = os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
     print(
         f"[generate_tools] {len(selected)} of {len(symbols)} seed symbol(s) selected; mode={mode}",
         file=sys.stderr,
     )
+    if not args.dry_run and base_model:
+        print(
+            f"[generate_tools] base model: {base_model!r}; escalating to "
+            f"{escalated_model!r} for tools with feedback / historical "
+            f"failures / deep MRO chains",
+            file=sys.stderr,
+        )
 
     selected_tool_names = sorted({tool_name_for(s) for s in selected})
     historical_by_tool = feedback_loop.gather_historical_failures(selected_tool_names)

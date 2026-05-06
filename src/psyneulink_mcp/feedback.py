@@ -166,7 +166,22 @@ def captured_tool(mcp: Any, layer: ToolLayer, **mcp_tool_kwargs: Any) -> Callabl
 
     Equivalent to `@mcp.tool(**mcp_tool_kwargs)` but the wrapped function
     routes exceptions through `log_runtime_error` before re-raising.
+
+    Description compaction
+    ----------------------
+
+    The auto-generated tool modules pass ``description=TOOL_DESCRIPTION``
+    where ``TOOL_DESCRIPTION`` inlines the full JSON-Schema parameter
+    block AND a trailing ``Notes:`` section. With 354 generated tools
+    that's ~258K tokens just for ``tools/list`` — past sonnet's 200K
+    context window before any conversation has even started. We strip
+    the schema/notes blocks here and park the full original in
+    :mod:`psyneulink_mcp.tool_descriptions` so the
+    ``describe_psyneulink_tool`` curated tool can hand it back on
+    demand. No regen required — this works on every already-rendered
+    module.
     """
+    from . import tool_descriptions as _td
 
     def decorator(fn: Callable) -> Callable:
         _TOOL_LAYERS[fn.__name__] = layer
@@ -184,6 +199,50 @@ def captured_tool(mcp: Any, layer: ToolLayer, **mcp_tool_kwargs: Any) -> Callabl
                 )
                 raise
 
-        return mcp.tool(**mcp_tool_kwargs)(wrapper)
+        # Stash the full description (and schema + PNL provenance, if
+        # the calling module surfaced them) for describe_psyneulink_tool,
+        # then replace the description the FastMCP registration sees
+        # with the prose-only compact form.
+        tool_kwargs = dict(mcp_tool_kwargs)
+        full_desc = tool_kwargs.get("description") or ""
+        tool_name = tool_kwargs.get("name") or fn.__name__
+        if full_desc:
+            module = _caller_module(fn)
+            _td.register_full_description(
+                tool_name,
+                full_desc,
+                parameters=_module_attr(module, "TOOL_PARAMETERS", dict),
+                qualname=_module_attr(module, "__pnl_qualname__", str),
+                kind=_module_attr(module, "__pnl_kind__", str),
+            )
+            tool_kwargs["description"] = _td.compact_description(full_desc)
+
+        return mcp.tool(**tool_kwargs)(wrapper)
 
     return decorator
+
+
+def _caller_module(fn: Callable) -> Any | None:
+    """Return the live module object the tool function was defined in."""
+    import sys
+
+    module_name = getattr(fn, "__module__", None)
+    if not module_name:
+        return None
+    return sys.modules.get(module_name)
+
+
+def _module_attr(module: Any, name: str, expected_type: type) -> Any:
+    """Return ``module.<name>`` if it's of ``expected_type``, else ``None``.
+
+    Used to lift the generator-emitted module-scope markers
+    (``TOOL_PARAMETERS``, ``__pnl_qualname__``, ``__pnl_kind__``) onto
+    the description registry. Curated modules that don't define them
+    get ``None``, which the registry treats as "no structured info".
+    """
+    if module is None:
+        return None
+    value = getattr(module, name, None)
+    if value is None or not isinstance(value, expected_type):
+        return None
+    return value

@@ -39,7 +39,13 @@ _REQUIRED_CONSTANTS = (
 # verbatim; when absent, the legacy ``create_*``-vs-everything-else
 # heuristic is used (those modules are class- or function-kind by
 # definition — no method module ever existed without ``__pnl_kind__``).
-_OPTIONAL_CONSTANTS = ("__pnl_kind__",)
+_OPTIONAL_CONSTANTS = (
+    "__pnl_kind__",
+    # Phase 3: hierarchy metadata. Older modules don't have these; the
+    # rerender path tolerates the absence and rewrites them as empty.
+    "__pnl_parents__",
+    "__pnl_parent_sha256s__",
+)
 
 
 class RerenderError(RuntimeError):
@@ -111,6 +117,18 @@ def rerender_path(path: Path) -> Path:
             qualname.rsplit(".", 1)[0] if "." in qualname else qualname
         )
 
+    parents_raw = constants.get("__pnl_parents__") or []
+    parent_short_names: tuple[str, ...] = tuple(
+        str(p) for p in parents_raw if isinstance(p, str)
+    )
+    parent_shas_raw = constants.get("__pnl_parent_sha256s__") or {}
+    parent_source_sha256s: tuple[tuple[str, str], ...] = ()
+    if isinstance(parent_shas_raw, dict):
+        parent_source_sha256s = tuple(
+            (str(k), str(v))
+            for k, v in parent_shas_raw.items()
+            if isinstance(k, str) and isinstance(v, str)
+        )
     symbol = SymbolMeta(
         qualname=qualname,
         kind=kind,  # type: ignore[arg-type]
@@ -118,6 +136,12 @@ def rerender_path(path: Path) -> Path:
         docstring=None,
         module=module_qualname,
         source_sha256=constants["__source_sha256__"],
+        parent_short_names=parent_short_names,
+        # parent_docstrings isn't recorded in the on-disk module (it
+        # lives in the regen prompt only), so the rerender path leaves
+        # it empty — that's fine, render_module doesn't read it.
+        parent_docstrings=(),
+        parent_source_sha256s=parent_source_sha256s,
     )
 
     parameters: dict[str, Any] = constants["TOOL_PARAMETERS"] or {}

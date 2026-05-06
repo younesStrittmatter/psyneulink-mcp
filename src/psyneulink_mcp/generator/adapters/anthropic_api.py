@@ -59,7 +59,13 @@ class AnthropicAPIAdapter:
         )
         self._client = self._anthropic.Anthropic(timeout=float(self.timeout_s))
 
-    def generate(self, prompt: str, *, schema: dict[str, Any]) -> ToolSpec:
+    def generate(
+        self,
+        prompt: str,
+        *,
+        schema: dict[str, Any],
+        model: str | None = None,
+    ) -> ToolSpec:
         tool = {
             "name": EMIT_TOOL_NAME,
             "description": (
@@ -70,7 +76,7 @@ class AnthropicAPIAdapter:
         }
         try:
             msg = self._client.messages.create(
-                model=self.model,
+                model=model or self.model,
                 max_tokens=4096,
                 messages=[{"role": "user", "content": prompt}],
                 tools=[tool],

@@ -33,9 +33,23 @@ class LLMAdapter(Protocol):
     """Adapter Protocol. Implementations must validate against ``schema``."""
 
     name: str
+    model: str
 
-    def generate(self, prompt: str, *, schema: dict[str, Any]) -> ToolSpec:
+    def generate(
+        self,
+        prompt: str,
+        *,
+        schema: dict[str, Any],
+        model: str | None = None,
+    ) -> ToolSpec:
         """Call the LLM and return a schema-validated :class:`ToolSpec`.
+
+        ``model`` is a per-call override of the adapter's default model.
+        Used by the orchestrator to escalate complicated tools (those
+        with feedback / framework issues / historical failures) to a
+        stronger model — e.g. opus for the hard cases, sonnet for the
+        rest. Adapters fall back to ``self.model`` when ``model`` is
+        ``None``.
 
         Raises:
             AdapterError: on missing dependency, non-zero exit, network

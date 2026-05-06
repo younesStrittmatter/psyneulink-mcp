@@ -45,6 +45,19 @@ class SymbolMeta:
     e.g. ``psyneulink.Composition.add_projection``. The class qualname
     is exposed via :attr:`class_qualname`; ``short_name`` is just the
     method name (the last segment).
+
+    Parent metadata
+    ---------------
+
+    For ``kind == "class"``, :attr:`parent_short_names` carries PNL's
+    actual class MRO (excluding ``object`` and non-PNL bases) in the
+    order ``inspect.getmro`` returns. :attr:`parent_docstrings` maps
+    each parent short name to the first paragraph of its docstring,
+    truncated to keep regen prompts compact. :attr:`parent_source_sha256s`
+    is the per-parent source-SHA used for cascade invalidation in
+    :func:`orchestrator._should_skip` — when a parent's source changes
+    its child's compressed description should be regenerated even if
+    the child's own source hasn't moved. Empty for non-class symbols.
     """
 
     qualname: str
@@ -53,6 +66,9 @@ class SymbolMeta:
     docstring: str | None
     module: str
     source_sha256: str
+    parent_short_names: tuple[str, ...] = ()
+    parent_docstrings: tuple[tuple[str, str], ...] = ()
+    parent_source_sha256s: tuple[tuple[str, str], ...] = ()
 
     @property
     def short_name(self) -> str:
@@ -73,6 +89,16 @@ class SymbolMeta:
         if parent is None:
             return None
         return parent.rsplit(".", 1)[-1]
+
+    @property
+    def parent_docstrings_dict(self) -> dict[str, str]:
+        """Convenience: parent short name → first-paragraph docstring."""
+        return dict(self.parent_docstrings)
+
+    @property
+    def parent_source_sha256s_dict(self) -> dict[str, str]:
+        """Convenience: parent short name → source SHA for cascade checks."""
+        return dict(self.parent_source_sha256s)
 
 
 @dataclass(frozen=True)
@@ -328,6 +354,14 @@ def _resolve_qualname(qualname: str) -> SymbolMeta | None:
     except (OSError, TypeError):
         return None
 
+    parent_short_names: tuple[str, ...] = ()
+    parent_docstrings: tuple[tuple[str, str], ...] = ()
+    parent_source_sha256s: tuple[tuple[str, str], ...] = ()
+    if kind == "class" and inspect.isclass(obj):
+        parent_short_names, parent_docstrings, parent_source_sha256s = (
+            _collect_parent_metadata(obj)
+        )
+
     return SymbolMeta(
         qualname=qualname,
         kind=kind,
@@ -335,7 +369,78 @@ def _resolve_qualname(qualname: str) -> SymbolMeta | None:
         docstring=inspect.getdoc(obj),
         module=getattr(obj, "__module__", package_qualname),
         source_sha256=hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        parent_short_names=parent_short_names,
+        parent_docstrings=parent_docstrings,
+        parent_source_sha256s=parent_source_sha256s,
     )
+
+
+# Maximum chars to keep from a parent class's docstring when including it
+# in a regen prompt — first paragraph is usually enough to ground the LLM,
+# and a paragraph cap keeps prompts predictable. Bumped up from "first
+# sentence" because some PNL base classes have multi-sentence first
+# paragraphs that reference important parameters.
+_PARENT_DOCSTRING_CHAR_CAP = 800
+
+
+def _first_paragraph(text: str | None, *, cap: int = _PARENT_DOCSTRING_CHAR_CAP) -> str:
+    """Return the first non-empty paragraph of ``text`` (capped to ``cap`` chars).
+
+    "Paragraph" = lines up to the first blank line. Falls back to the
+    full text when there's no blank line. Empty input → empty string.
+    """
+    if not text:
+        return ""
+    lines: list[str] = []
+    for raw in text.splitlines():
+        if not raw.strip():
+            if lines:
+                break
+            continue
+        lines.append(raw)
+    paragraph = "\n".join(lines).strip()
+    if len(paragraph) > cap:
+        return paragraph[: cap - 1].rstrip() + "…"
+    return paragraph
+
+
+def _collect_parent_metadata(
+    cls: type,
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]:
+    """Walk PNL's MRO for ``cls`` and collect parent docstrings + SHAs.
+
+    Returns ``(parent_short_names, parent_docstrings, parent_sha_pairs)``.
+    Each tuple is in MRO order (immediate parent first), filtered to PNL
+    classes only — non-PNL framework bases don't help the regen LLM.
+
+    The SHA pairs let :func:`orchestrator._should_skip` cascade-invalidate
+    a child when a parent's source changes. Parents whose source can't be
+    read (C-implemented descriptors, dynamically-built classes) are kept
+    in ``parent_short_names`` (so the prompt still mentions them) but
+    omitted from ``parent_sha_pairs`` (we have nothing to compare).
+    """
+    short_names: list[str] = []
+    docstrings: list[tuple[str, str]] = []
+    sha_pairs: list[tuple[str, str]] = []
+    for parent in cls.__mro__[1:]:
+        if parent is object:
+            continue
+        parent_module = getattr(parent, "__module__", "") or ""
+        if not parent_module.startswith("psyneulink"):
+            continue
+        parent_short = parent.__name__
+        short_names.append(parent_short)
+        doc = _first_paragraph(inspect.getdoc(parent))
+        if doc:
+            docstrings.append((parent_short, doc))
+        try:
+            parent_source = inspect.getsource(parent)
+        except (OSError, TypeError):
+            continue
+        sha_pairs.append(
+            (parent_short, hashlib.sha256(parent_source.encode("utf-8")).hexdigest())
+        )
+    return tuple(short_names), tuple(docstrings), tuple(sha_pairs)
 
 
 def _resolve_method_qualname(qualname: str) -> SymbolMeta | None:

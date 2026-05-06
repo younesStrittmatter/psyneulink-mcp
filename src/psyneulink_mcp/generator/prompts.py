@@ -53,7 +53,7 @@ Module:  {module}
 {kind_addendum}
 --- DOCSTRING ---
 {docstring}
-
+{parents_section}{examples_section}
 --- SOURCE ---
 {source}
 
@@ -64,7 +64,7 @@ Return a ToolSpec with these fields:
 
 - description: 1-3 sentences. WHEN should an agent call this tool? What does
   the result look like? Optimize for an LLM consumer reading the description
-  while deciding which tool to call. Do NOT just restate the docstring.
+  while deciding which tool to call. Do NOT just restate the docstring.{compression_clause}
 
 - parameters: a JSON Schema describing the keyword arguments the agent should
   pass. The host instantiates `{qualname}` with these arguments (for classes)
@@ -80,6 +80,22 @@ Return a ToolSpec with these fields:
 
 If RECENT FEEDBACK is non-empty, address it directly in the description,
 parameters, or notes — that's what the feedback loop is for.
+
+CRITICAL — describe THIS tool only.
+
+Each tool's description must be self-contained and about this tool alone. Do
+NOT recommend a different tool by name as an alternative or workaround. If
+feedback says "the agent fixed this by using EMComposition / a pathway tool /
+a different mechanism", describe what doesn't work in THIS tool — not what to
+use instead. The agent decides which tool to use; your job is to describe what
+each tool is and its constraints. Cross-referencing other tools by name
+silently couples descriptions: when that other tool gets renamed or removed,
+this description rots.
+
+Mentioning related concepts, parameters, or PNL classes is fine ("the
+returned handle goes into a Composition", "this is a subclass of Mechanism").
+Mentioning other tool names by their `create_*` MCP name as recommended
+substitutes is not.
 
 Output ONLY the structured ToolSpec; no prose, no markdown.
 """
@@ -151,6 +167,37 @@ _METHOD_SPECIFIC_ADDENDA: dict[str, str] = {
 }
 
 
+_COMPRESSION_CLAUSE = (
+    "\n  This class inherits from the parents listed under "
+    "INHERITS FROM above. The runtime exposes that hierarchy to the "
+    "agent via `describe_psyneulink_tool` (the agent can drill into "
+    "any parent's tool by name), so your description should focus on "
+    "what THIS class adds beyond those parents. Do NOT re-explain "
+    "behavior or parameters that are documented on a parent — assume "
+    "the agent will look those up. Mention parents by name when it "
+    "helps clarity."
+)
+
+
+def _render_parents_section(symbol: SymbolMeta) -> str:
+    """Render the optional ``--- INHERITS FROM ---`` block for the prompt.
+
+    Only emitted for class-kind symbols that have at least one parent
+    docstring captured at introspection time. Includes each parent's
+    short name + first-paragraph docstring (already char-capped in
+    introspection). Empty string when the symbol has no usable parents
+    — the prompt template tolerates that without an extra newline.
+    """
+    if symbol.kind != "class" or not symbol.parent_docstrings:
+        return ""
+    lines = ["", "--- INHERITS FROM ---"]
+    for parent_short, parent_doc in symbol.parent_docstrings:
+        lines.append(f"## {parent_short}")
+        lines.append(parent_doc)
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str:
     """Render the user-prompt for one symbol.
 
@@ -170,6 +217,9 @@ def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str
         )
     else:
         kind_addendum = ""
+    parents_section = _render_parents_section(symbol)
+    compression_clause = _COMPRESSION_CLAUSE if parents_section else ""
+    examples_section = _render_examples_section(symbol)
     return PROMPT_TEMPLATE.format(
         qualname=symbol.qualname,
         short_name=symbol.short_name,
@@ -179,4 +229,31 @@ def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str
         docstring=symbol.docstring or "(no docstring)",
         source=symbol.source,
         feedback=feedback_text,
+        parents_section=parents_section,
+        compression_clause=compression_clause,
+        examples_section=examples_section,
     )
+
+
+def _render_examples_section(symbol: SymbolMeta) -> str:
+    """Render the optional ``--- USAGE EXAMPLES FROM PSYNEULINK ---`` block.
+
+    Pulls 0-2 snippets from PNL's ``library/models/`` and
+    ``library/compositions/`` (canonical reproductions of published
+    cognitive models). Returns the empty string when no canonical
+    model uses this symbol — that's the safety valve so adding an
+    example source can never break prompt rendering.
+
+    For methods we look up the owning class's short name; the surface
+    use sites for ``Composition.add_projection`` are spelled
+    ``composition.add_projection(...)`` and don't word-boundary match
+    the bare method name in any useful way.
+    """
+    from .pnl_examples import find_examples_for, render_examples_block
+
+    if symbol.kind == "method" and symbol.class_short_name:
+        needle = symbol.class_short_name
+    else:
+        needle = symbol.short_name
+    snippets = find_examples_for(needle)
+    return render_examples_block(snippets)

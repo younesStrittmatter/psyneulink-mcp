@@ -11,9 +11,11 @@ from mcp.server.fastmcp import FastMCP
 
 from .tools.curated import brainlike as curated_brainlike
 from .tools.curated import composition as curated_composition
+from .tools.curated import composition_introspection as curated_composition_introspection
 from .tools.curated import feedback as curated_feedback
 from .tools.curated import persistence as curated_persistence
 from .tools.curated import psyche as curated_psyche
+from .tools.curated import tool_descriptions as curated_tool_descriptions
 from .tools.curated import visualization as curated_visualization
 from .tools.generated import register_all as register_generated
 
@@ -22,9 +24,13 @@ mcp = FastMCP("psyneulink-mcp")
 curated_feedback.register(mcp)
 curated_brainlike.register(mcp)
 curated_composition.register(mcp)
+curated_composition_introspection.register(mcp)
 curated_persistence.register(mcp)
 curated_visualization.register(mcp)
 curated_psyche.register(mcp)
+# Register the lazy-expansion lookup BEFORE the generated tools so it
+# is available even if a generated module fails to import.
+curated_tool_descriptions.register(mcp)
 register_generated(mcp)
 
 
