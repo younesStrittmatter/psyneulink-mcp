@@ -11,98 +11,79 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'a7616f78670f80e2f98d0ff7c781e2c3edb417162c1f59e88ef1751bcfc1a04d'
-__pnl_qualname__ = 'psyneulink.LCAMechanism'
+__pnl_qualname__ = 'psyneulink.library.components.mechanisms.processing.transfer.lcamechanism.LCAMechanism'
 __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_lca_mechanism'
-TOOL_DESCRIPTION = 'Call this tool to create a Leaky Competitive Accumulator (LCA) mechanism — a recurrent transfer mechanism suitable for decision-making, winner-take-all dynamics, and accumulator-race models. Returns a PsyNeuLink LCAMechanism instance with lateral inhibition via `competition` and optional self-excitation. Use this when you need units that suppress each other over time until one dominates (e.g., a response selection layer).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "clip": {\n      "description": "[min, max] bounds applied to output activations after each step.",\n      "items": {\n        "type": "number"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "competition": {\n      "default": 1,\n      "description": "Magnitude of lateral inhibition (off-diagonal elements in recurrent matrix become -competition). Must be non-negative; a negative value is allowed but reverses the sign convention and triggers a warning.",\n      "type": "number"\n    },\n    "function": {\n      "description": "Transfer function applied after integration. Default is Logistic. Pass the PNL function name as a string (e.g., \'Logistic\', \'ReLU\').",\n      "type": "string"\n    },\n    "initial_value": {\n      "description": "Starting activation values, one per unit. Length must match input_shapes.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Number of units (size of the input/output vector). E.g., 3 for a 3-alternative choice.",\n      "type": "integer"\n    },\n    "integrator_mode": {\n      "default": true,\n      "description": "When true (default for LCA), the mechanism accumulates over time steps. Set false to use it as a single-step transfer mechanism.",\n      "type": "boolean"\n    },\n    "leak": {\n      "default": 0.5,\n      "description": "Leak rate of the LeakyCompetingIntegrator; scales how much prior activation decays each step. Range [0,1]: 0 = no decay, 1 = full reset each step.",\n      "type": "number"\n    },\n    "name": {\n      "description": "Name for the mechanism.",\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Noise added to the integrator each step.",\n      "type": "number"\n    },\n    "self_excitation": {\n      "default": 0,\n      "description": "Magnitude of self-feedback (diagonal of recurrent matrix). Default 0 means no self-excitation.",\n      "type": "number"\n    },\n    "threshold": {\n      "description": "Value at which is_finished becomes True and the mechanism stops accumulating. Set together with threshold_criterion. Omit or set null for no stopping criterion.",\n      "type": "number"\n    },\n    "threshold_criterion": {\n      "default": "VALUE",\n      "description": "How threshold is evaluated. VALUE: max unit activation >= threshold. MAX_VS_NEXT: gap between top two units >= threshold (requires input_shapes >= 2). MAX_VS_AVG: top unit minus average of others >= threshold (requires input_shapes >= 2). CONVERGENCE: max absolute change between steps <= threshold.",\n      "enum": [\n        "VALUE",\n        "MAX_VS_NEXT",\n        "MAX_VS_AVG",\n        "CONVERGENCE"\n      ],\n      "type": "string"\n    },\n    "time_step_size": {\n      "default": 0.1,\n      "description": "Integration time step for the LeakyCompetingIntegrator. Smaller values increase precision but require more steps to reach threshold.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nKNOWN PNL BUG (tracked in corpus issue #3): If `threshold_criterion` is set to an unrecognized value, PsyNeuLink\'s `_parse_threshold_args` raises `AttributeError: \'LCAMechanism\' object has no attribute \'__name__\'` instead of a clean LCAError — this is a bug in the PNL source (`self.__name__` should be `self.__class__.__name__`). The valid enum values above match the PNL constants exactly; only pass one of those four strings. If the error occurs, it means the string did not match a PNL constant, not that the tool schema is wrong.\n\n`competition` and `hetero` are coupled: PNL internally sets `hetero = -competition`. Do not pass both; use `competition` only.\n\n`self_excitation` is an alias for PNL\'s `auto` parameter. Do not pass both.\n\nIf `matrix` is passed directly (not in this schema), PNL ignores `self_excitation` and `competition` and emits a warning — prefer the high-level parameters.\n\n`MAX_VS_NEXT` and `MAX_VS_AVG` threshold criteria require `input_shapes >= 2`; using them with a single-unit mechanism will raise an error at run time.\n\n`integrator_mode` defaults to `True` for LCAMechanism (unlike base TransferMechanism where it is False) — the mechanism is designed for iterative accumulation.'
-TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': '[min, max] bounds applied to output '
-                                           'activations after each step.',
+TOOL_DESCRIPTION = 'Call this tool to create a Leaky Competitive Accumulator (LCA) mechanism — use it when modeling competitive selection, winner-take-all dynamics, or evidence accumulation with lateral inhibition between units. Returns an LCAMechanism instance that must be added to a Composition before running. The mechanism integrates inputs over time with configurable mutual inhibition, self-excitation, and leak, and can terminate automatically when a threshold criterion is met.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "clip": {\n      "description": "[min, max] range to clip activations after each integration step.",\n      "items": {\n        "type": "number"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "competition": {\n      "default": 1,\n      "description": "Magnitude of mutual inhibition between units (off-diagonal recurrent weights). Must be a positive number \\u2014 PNL internally negates it to inhibit competitors.",\n      "type": "number"\n    },\n    "initial_value": {\n      "description": "Starting activation value for all units at the beginning of integration.",\n      "type": "number"\n    },\n    "input_shapes": {\n      "description": "Number of units (input dimensionality). Must be >= 2 when threshold_criterion is \'max_vs_next\' or \'max_vs_avg\'.",\n      "type": "integer"\n    },\n    "leak": {\n      "default": 0.5,\n      "description": "Decay rate in the LeakyCompetingIntegrator. Higher values cause faster decay of activation.",\n      "type": "number"\n    },\n    "name": {\n      "description": "Name for the mechanism.",\n      "type": "string"\n    },\n    "noise": {\n      "description": "Noise added to integration on each time step.",\n      "type": "number"\n    },\n    "self_excitation": {\n      "default": 0,\n      "description": "Magnitude of self-recurrent excitation for each unit (diagonal recurrent weights).",\n      "type": "number"\n    },\n    "threshold": {\n      "description": "Activation level at which is_finished is set to True, stopping integration. Used together with threshold_criterion.",\n      "type": "number"\n    },\n    "threshold_criterion": {\n      "description": "Criterion used to evaluate whether threshold is reached. \'value\': max activation >= threshold. \'max_vs_next\': difference between top two units >= threshold (requires input_shapes >= 2). \'max_vs_avg\': max minus average of others >= threshold (requires input_shapes >= 2). \'convergence\': change between steps <= threshold.",\n      "enum": [\n        "value",\n        "max_vs_next",\n        "max_vs_avg",\n        "convergence"\n      ],\n      "type": "string"\n    },\n    "time_step_size": {\n      "default": 0.1,\n      "description": "Integration time step for the LeakyCompetingIntegrator.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL — threshold_criterion bug: passing uppercase strings like "MAX_VS_NEXT" triggers an AttributeError in PNL\'s _parse_threshold_args (\'LCAMechanism\' object has no attribute \'__name__\'). Always use lowercase: "value", "max_vs_next", "max_vs_avg", "convergence". This is a bug in PNL source (uses self.__name__ instead of self.__class__.__name__ in the error branch), triggered when an unrecognized string is passed.\n\ncompetition must be positive; PNL stores it as inhibition magnitude and sets off-diagonal recurrent weights to -competition. Passing a negative competition value is allowed but produces a warning and inverts the expected behavior.\n\nself_excitation is an alias for the internal \'auto\' parameter; do not pass both self_excitation and auto.\n\ncompetition and hetero are inverses (hetero = -competition); specifying both with inconsistent values raises LCAError. Omit hetero and use competition only.\n\nPassing a matrix argument overrides both self_excitation and competition silently (with a warning); do not mix matrix with self_excitation/competition.\n\nthreshold_criterion \'max_vs_next\' and \'max_vs_avg\' require input_shapes >= 2; using them with a single unit raises an error at run time.'
+TOOL_PARAMETERS = { 'properties': { 'clip': { 'description': '[min, max] range to clip activations after '
+                                           'each integration step.',
                             'items': {'type': 'number'},
                             'maxItems': 2,
                             'minItems': 2,
                             'type': 'array'},
                   'competition': { 'default': 1,
-                                   'description': 'Magnitude of lateral inhibition '
-                                                  '(off-diagonal elements in recurrent '
-                                                  'matrix become -competition). Must '
-                                                  'be non-negative; a negative value '
-                                                  'is allowed but reverses the sign '
-                                                  'convention and triggers a warning.',
+                                   'description': 'Magnitude of mutual inhibition '
+                                                  'between units (off-diagonal '
+                                                  'recurrent weights). Must be a '
+                                                  'positive number — PNL internally '
+                                                  'negates it to inhibit competitors.',
                                    'type': 'number'},
-                  'function': { 'description': 'Transfer function applied after '
-                                               'integration. Default is Logistic. Pass '
-                                               'the PNL function name as a string '
-                                               "(e.g., 'Logistic', 'ReLU').",
-                                'type': 'string'},
-                  'initial_value': { 'description': 'Starting activation values, one '
-                                                    'per unit. Length must match '
-                                                    'input_shapes.',
-                                     'items': {'type': 'number'},
-                                     'type': 'array'},
-                  'input_shapes': { 'description': 'Number of units (size of the '
-                                                   'input/output vector). E.g., 3 for '
-                                                   'a 3-alternative choice.',
+                  'initial_value': { 'description': 'Starting activation value for all '
+                                                    'units at the beginning of '
+                                                    'integration.',
+                                     'type': 'number'},
+                  'input_shapes': { 'description': 'Number of units (input '
+                                                   'dimensionality). Must be >= 2 when '
+                                                   'threshold_criterion is '
+                                                   "'max_vs_next' or 'max_vs_avg'.",
                                     'type': 'integer'},
-                  'integrator_mode': { 'default': True,
-                                       'description': 'When true (default for LCA), '
-                                                      'the mechanism accumulates over '
-                                                      'time steps. Set false to use it '
-                                                      'as a single-step transfer '
-                                                      'mechanism.',
-                                       'type': 'boolean'},
                   'leak': { 'default': 0.5,
-                            'description': 'Leak rate of the LeakyCompetingIntegrator; '
-                                           'scales how much prior activation decays '
-                                           'each step. Range [0,1]: 0 = no decay, 1 = '
-                                           'full reset each step.',
+                            'description': 'Decay rate in the '
+                                           'LeakyCompetingIntegrator. Higher values '
+                                           'cause faster decay of activation.',
                             'type': 'number'},
                   'name': {'description': 'Name for the mechanism.', 'type': 'string'},
-                  'noise': { 'default': 0,
-                             'description': 'Noise added to the integrator each step.',
+                  'noise': { 'description': 'Noise added to integration on each time '
+                                            'step.',
                              'type': 'number'},
                   'self_excitation': { 'default': 0,
-                                       'description': 'Magnitude of self-feedback '
-                                                      '(diagonal of recurrent matrix). '
-                                                      'Default 0 means no '
-                                                      'self-excitation.',
+                                       'description': 'Magnitude of self-recurrent '
+                                                      'excitation for each unit '
+                                                      '(diagonal recurrent weights).',
                                        'type': 'number'},
-                  'threshold': { 'description': 'Value at which is_finished becomes '
-                                                'True and the mechanism stops '
-                                                'accumulating. Set together with '
-                                                'threshold_criterion. Omit or set null '
-                                                'for no stopping criterion.',
+                  'threshold': { 'description': 'Activation level at which is_finished '
+                                                'is set to True, stopping integration. '
+                                                'Used together with '
+                                                'threshold_criterion.',
                                  'type': 'number'},
-                  'threshold_criterion': { 'default': 'VALUE',
-                                           'description': 'How threshold is evaluated. '
-                                                          'VALUE: max unit activation '
-                                                          '>= threshold. MAX_VS_NEXT: '
-                                                          'gap between top two units '
-                                                          '>= threshold (requires '
+                  'threshold_criterion': { 'description': 'Criterion used to evaluate '
+                                                          'whether threshold is '
+                                                          "reached. 'value': max "
+                                                          'activation >= threshold. '
+                                                          "'max_vs_next': difference "
+                                                          'between top two units >= '
+                                                          'threshold (requires '
                                                           'input_shapes >= 2). '
-                                                          'MAX_VS_AVG: top unit minus '
+                                                          "'max_vs_avg': max minus "
                                                           'average of others >= '
                                                           'threshold (requires '
                                                           'input_shapes >= 2). '
-                                                          'CONVERGENCE: max absolute '
-                                                          'change between steps <= '
-                                                          'threshold.',
-                                           'enum': [ 'VALUE',
-                                                     'MAX_VS_NEXT',
-                                                     'MAX_VS_AVG',
-                                                     'CONVERGENCE'],
+                                                          "'convergence': change "
+                                                          'between steps <= threshold.',
+                                           'enum': [ 'value',
+                                                     'max_vs_next',
+                                                     'max_vs_avg',
+                                                     'convergence'],
                                            'type': 'string'},
                   'time_step_size': { 'default': 0.1,
                                       'description': 'Integration time step for the '
-                                                     'LeakyCompetingIntegrator. '
-                                                     'Smaller values increase '
-                                                     'precision but require more steps '
-                                                     'to reach threshold.',
+                                                     'LeakyCompetingIntegrator.',
                                       'type': 'number'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = "KNOWN PNL BUG (tracked in corpus issue #3): If `threshold_criterion` is set to an unrecognized value, PsyNeuLink's `_parse_threshold_args` raises `AttributeError: 'LCAMechanism' object has no attribute '__name__'` instead of a clean LCAError — this is a bug in the PNL source (`self.__name__` should be `self.__class__.__name__`). The valid enum values above match the PNL constants exactly; only pass one of those four strings. If the error occurs, it means the string did not match a PNL constant, not that the tool schema is wrong.\n\n`competition` and `hetero` are coupled: PNL internally sets `hetero = -competition`. Do not pass both; use `competition` only.\n\n`self_excitation` is an alias for PNL's `auto` parameter. Do not pass both.\n\nIf `matrix` is passed directly (not in this schema), PNL ignores `self_excitation` and `competition` and emits a warning — prefer the high-level parameters.\n\n`MAX_VS_NEXT` and `MAX_VS_AVG` threshold criteria require `input_shapes >= 2`; using them with a single-unit mechanism will raise an error at run time.\n\n`integrator_mode` defaults to `True` for LCAMechanism (unlike base TransferMechanism where it is False) — the mechanism is designed for iterative accumulation."
+TOOL_NOTES = 'CRITICAL — threshold_criterion bug: passing uppercase strings like "MAX_VS_NEXT" triggers an AttributeError in PNL\'s _parse_threshold_args (\'LCAMechanism\' object has no attribute \'__name__\'). Always use lowercase: "value", "max_vs_next", "max_vs_avg", "convergence". This is a bug in PNL source (uses self.__name__ instead of self.__class__.__name__ in the error branch), triggered when an unrecognized string is passed.\n\ncompetition must be positive; PNL stores it as inhibition magnitude and sets off-diagonal recurrent weights to -competition. Passing a negative competition value is allowed but produces a warning and inverts the expected behavior.\n\nself_excitation is an alias for the internal \'auto\' parameter; do not pass both self_excitation and auto.\n\ncompetition and hetero are inverses (hetero = -competition); specifying both with inconsistent values raises LCAError. Omit hetero and use competition only.\n\nPassing a matrix argument overrides both self_excitation and competition silently (with a warning); do not mix matrix with self_excitation/competition.\n\nthreshold_criterion \'max_vs_next\' and \'max_vs_avg\' require input_shapes >= 2; using them with a single unit raises an error at run time.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -127,5 +108,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_lca_mechanism(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to create a Leaky Competitive Accumulator (LCA) mechanism — a recurrent transfer mechanism suitable for decision-making, winner-take-all dynamics, and accumulator-race models.'
+        'Call this tool to create a Leaky Competitive Accumulator (LCA) mechanism — use it when modeling competitive selection, winner-take-all dynamics, or evidence accumulation with lateral inhibition between units.'
         return _impl(args or {})

@@ -16,62 +16,74 @@ __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_soft_max'
-TOOL_DESCRIPTION = 'Call this tool to create a SoftMax transfer function object that normalizes a numeric array into a probability distribution. Use it when you need to assign a softmax activation function to a PsyNeuLink mechanism (e.g., as the `function` argument of a TransferMechanism) or when you need to transform logits into probabilities with configurable output format (full distribution, argmax indicator, probabilistic selection, etc.). Returns a SoftMax Function object — not a mechanism.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "adapt_base": {\n      "description": "Base additive term used by the adaptive gain formula. Only relevant when gain=\'ADAPTIVE\'. Default: 1.0.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "adapt_entropy_weighting": {\n      "description": "Entropy weighting factor used by the adaptive gain formula. Only relevant when gain=\'ADAPTIVE\'. Default: 0.1.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "adapt_scale": {\n      "description": "Scale multiplier used by the adaptive gain formula. Only relevant when gain=\'ADAPTIVE\'. Default: 1.0.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "default_variable": {\n      "description": "Template 1D array specifying the shape of the input to be transformed. Optional \\u2014 omit to use the default.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "gain": {\n      "description": "Inverse temperature scaling applied before softmax. A positive scalar sharpens/flattens the distribution; \'ADAPTIVE\' dynamically adjusts gain based on entropy and vector length to keep peak mass consistent across different vector sizes. Default: 1.0.",\n      "oneOf": [\n        {\n          "exclusiveMinimum": 0,\n          "type": "number"\n        },\n        {\n          "enum": [\n            "ADAPTIVE"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "mask_threshold": {\n      "description": "If provided, elements whose absolute value (after gain scaling) is below this threshold are set to -inf before softmax, effectively masking them. Only applies when gain is a scalar; ignored when gain is \'ADAPTIVE\'. Default: None (no masking).",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "output": {\n      "description": "Format of the returned array. ALL: full softmax distribution. ARG_MAX/ARG_MAX_INDICATOR: 1 at the highest-value element, 0 elsewhere (lowest index wins ties). MAX_VAL: softmax value at the max element(s), 0 elsewhere. MAX_INDICATOR: 1 at all max elements, 0 elsewhere. PROB: probabilistically sampled one-hot based on the softmax distribution. Default: \'ALL\'.",\n      "enum": [\n        "ALL",\n        "ARG_MAX",\n        "ARG_MAX_INDICATOR",\n        "MAX_VAL",\n        "MAX_INDICATOR",\n        "PROB"\n      ],\n      "type": "string"\n    },\n    "per_item": {\n      "description": "For 2D input variables, if true applies softmax independently to each row; if false applies softmax to the entire 2D array. Default: true.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL (from confirmed runtime failures): `SoftMax.__init__()` does NOT accept a `name` argument — passing it raises TypeError. Do not include `name` in the kwargs under any circumstances.\n\n- If the input variable is all zeros, the SoftMax returns all zeros (no error).\n- `mask_threshold` is silently ignored when `gain=\'ADAPTIVE\'`; similarly, `adapt_scale`, `adapt_base`, and `adapt_entropy_weighting` have no effect unless `gain=\'ADAPTIVE\'`.\n- Sparse/one-hot inputs in longer vectors: the softmax peak mass diminishes with vector length (e.g., [1,0] → 0.73 vs [1,0,0,0] → 0.48). Use `mask_threshold` (scalar gain) or `gain=\'ADAPTIVE\'` to compensate.\n- `output=\'PROB\'` raises an exception when calling `.derivative()`, since the chosen element is ambiguous.\n- The LLVM execution path only supports `ARG_MAX`, `ARG_MAX_INDICATOR`, `MAX_VAL`, `MAX_INDICATOR` for derivatives; `ALL` is supported for forward pass.\n- `mask_threshold` requires that gain is a positive scalar; a warning (not error) is issued if the input contains negative values when masking is active.'
-TOOL_PARAMETERS = { 'properties': { 'adapt_base': { 'description': 'Base additive term used by the '
-                                                 'adaptive gain formula. Only relevant '
-                                                 "when gain='ADAPTIVE'. Default: 1.0.",
+TOOL_DESCRIPTION = 'Call this tool to create a PsyNeuLink `SoftMax` Function instance that applies the softmax transformation to a numeric array. Use it when you need a softmax activation function for a Mechanism\'s `function` parameter — the result is a configured `SoftMax` object ready to be passed as `function=` to a TransferMechanism or similar. Supports scalar gain (sharpness/temperature), adaptive gain for sparse vectors, pre-softmax thresholding, and multiple output formats (full distribution, argmax indicator, probabilistic sampling).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "adapt_base": {\n      "default": 1,\n      "description": "Base offset used by the adaptive gain computation (only relevant when gain=\'ADAPTIVE\'). Must be positive. Defaults to 1.0.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "adapt_entropy_weighting": {\n      "default": 0.95,\n      "description": "Entropy weighting factor used by the adaptive gain computation (only relevant when gain=\'ADAPTIVE\'). Must be positive. Defaults to 0.95.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "adapt_scale": {\n      "default": 1,\n      "description": "Scale factor used by the adaptive gain computation (only relevant when gain=\'ADAPTIVE\'). Must be positive. Defaults to 1.0.",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    },\n    "default_variable": {\n      "description": "Template array defining the shape of the input the function expects. Provide a 1d array of numbers to fix the input dimensionality. Optional \\u2014 omit to accept any 1d input.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "gain": {\n      "default": 1,\n      "description": "Inverse temperature scaling applied before the softmax. Must be a positive number, or the string \'ADAPTIVE\' to dynamically adjust gain based on the entropy of the input (useful for sparse/one-hot vectors). Defaults to 1.0.",\n      "oneOf": [\n        {\n          "exclusiveMinimum": 0,\n          "type": "number"\n        },\n        {\n          "enum": [\n            "ADAPTIVE"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "mask_threshold": {\n      "default": null,\n      "description": "If provided, elements of the scaled input whose absolute value is below this threshold are set to -inf before softmax (effectively masked out). Must be a positive scalar. Only applies when gain is a scalar \\u2014 ignored when gain is \'ADAPTIVE\'. Defaults to null (no thresholding).",\n      "oneOf": [\n        {\n          "exclusiveMinimum": 0,\n          "type": "number"\n        },\n        {\n          "type": "null"\n        }\n      ]\n    },\n    "output": {\n      "default": "ALL",\n      "description": "Format of the returned array. \'ALL\' returns the full softmax distribution. \'ARG_MAX\'/\'ARG_MAX_INDICATOR\' return 1 at the single highest-value element, 0 elsewhere. \'MAX_VAL\' returns the softmax value at the max position(s), 0 elsewhere. \'MAX_INDICATOR\' returns 1 at all max-value positions. \'PROB\' stochastically selects one element proportional to softmax probabilities.",\n      "enum": [\n        "ALL",\n        "ARG_MAX",\n        "ARG_MAX_INDICATOR",\n        "MAX_VAL",\n        "MAX_INDICATOR",\n        "PROB"\n      ],\n      "type": "string"\n    },\n    "per_item": {\n      "default": true,\n      "description": "For 2d input arrays, whether to apply softmax independently to each row (true) or across the entire 2d array as a flat vector (false). Defaults to true.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL: `name` is NOT a valid constructor argument for SoftMax despite appearing in the docstring. Passing `name` causes `TypeError: SoftMax.__init__() got an unexpected keyword argument \'name\'` — do not include it.\n\nThe `adapt_entropy_weighting` default in the source code is 0.95, not 0.1 as stated in the docstring — use 0.95.\n\nWhen `gain=\'ADAPTIVE\'`, `mask_threshold` is silently ignored regardless of its value.\n\nWhen `output` is anything other than `\'ALL\'`, the derivative method will raise an error for `\'PROB\'` — avoid calling derivative on a PROB-output SoftMax.\n\nIf the input variable is all zeros, SoftMax returns all zeros (not a uniform distribution).\n\nFor sparse/one-hot inputs, the max value after softmax shrinks as vector length grows (e.g., [1,0] → 0.73 but [1,0,0,0] → 0.48 at the max). Use `gain=\'ADAPTIVE\'` or `mask_threshold` to compensate.'
+TOOL_PARAMETERS = { 'properties': { 'adapt_base': { 'default': 1,
+                                  'description': 'Base offset used by the adaptive '
+                                                 'gain computation (only relevant when '
+                                                 "gain='ADAPTIVE'). Must be positive. "
+                                                 'Defaults to 1.0.',
                                   'exclusiveMinimum': 0,
                                   'type': 'number'},
-                  'adapt_entropy_weighting': { 'description': 'Entropy weighting '
+                  'adapt_entropy_weighting': { 'default': 0.95,
+                                               'description': 'Entropy weighting '
                                                               'factor used by the '
-                                                              'adaptive gain formula. '
-                                                              'Only relevant when '
-                                                              "gain='ADAPTIVE'. "
-                                                              'Default: 0.1.',
+                                                              'adaptive gain '
+                                                              'computation (only '
+                                                              'relevant when '
+                                                              "gain='ADAPTIVE'). Must "
+                                                              'be positive. Defaults '
+                                                              'to 0.95.',
                                                'exclusiveMinimum': 0,
                                                'type': 'number'},
-                  'adapt_scale': { 'description': 'Scale multiplier used by the '
-                                                  'adaptive gain formula. Only '
-                                                  "relevant when gain='ADAPTIVE'. "
-                                                  'Default: 1.0.',
+                  'adapt_scale': { 'default': 1,
+                                   'description': 'Scale factor used by the adaptive '
+                                                  'gain computation (only relevant '
+                                                  "when gain='ADAPTIVE'). Must be "
+                                                  'positive. Defaults to 1.0.',
                                    'exclusiveMinimum': 0,
                                    'type': 'number'},
-                  'default_variable': { 'description': 'Template 1D array specifying '
-                                                       'the shape of the input to be '
-                                                       'transformed. Optional — omit '
-                                                       'to use the default.',
+                  'default_variable': { 'description': 'Template array defining the '
+                                                       'shape of the input the '
+                                                       'function expects. Provide a 1d '
+                                                       'array of numbers to fix the '
+                                                       'input dimensionality. Optional '
+                                                       '— omit to accept any 1d input.',
                                         'items': {'type': 'number'},
                                         'type': 'array'},
-                  'gain': { 'description': 'Inverse temperature scaling applied before '
-                                           'softmax. A positive scalar '
-                                           'sharpens/flattens the distribution; '
-                                           "'ADAPTIVE' dynamically adjusts gain based "
-                                           'on entropy and vector length to keep peak '
-                                           'mass consistent across different vector '
-                                           'sizes. Default: 1.0.',
+                  'gain': { 'default': 1,
+                            'description': 'Inverse temperature scaling applied before '
+                                           'the softmax. Must be a positive number, or '
+                                           "the string 'ADAPTIVE' to dynamically "
+                                           'adjust gain based on the entropy of the '
+                                           'input (useful for sparse/one-hot vectors). '
+                                           'Defaults to 1.0.',
                             'oneOf': [ {'exclusiveMinimum': 0, 'type': 'number'},
                                        {'enum': ['ADAPTIVE'], 'type': 'string'}]},
-                  'mask_threshold': { 'description': 'If provided, elements whose '
-                                                     'absolute value (after gain '
-                                                     'scaling) is below this threshold '
-                                                     'are set to -inf before softmax, '
-                                                     'effectively masking them. Only '
-                                                     'applies when gain is a scalar; '
+                  'mask_threshold': { 'default': None,
+                                      'description': 'If provided, elements of the '
+                                                     'scaled input whose absolute '
+                                                     'value is below this threshold '
+                                                     'are set to -inf before softmax '
+                                                     '(effectively masked out). Must '
+                                                     'be a positive scalar. Only '
+                                                     'applies when gain is a scalar — '
                                                      "ignored when gain is 'ADAPTIVE'. "
-                                                     'Default: None (no masking).',
-                                      'exclusiveMinimum': 0,
-                                      'type': 'number'},
-                  'output': { 'description': 'Format of the returned array. ALL: full '
-                                             'softmax distribution. '
-                                             'ARG_MAX/ARG_MAX_INDICATOR: 1 at the '
-                                             'highest-value element, 0 elsewhere '
-                                             '(lowest index wins ties). MAX_VAL: '
-                                             'softmax value at the max element(s), 0 '
-                                             'elsewhere. MAX_INDICATOR: 1 at all max '
-                                             'elements, 0 elsewhere. PROB: '
-                                             'probabilistically sampled one-hot based '
-                                             'on the softmax distribution. Default: '
-                                             "'ALL'.",
+                                                     'Defaults to null (no '
+                                                     'thresholding).',
+                                      'oneOf': [ { 'exclusiveMinimum': 0,
+                                                   'type': 'number'},
+                                                 {'type': 'null'}]},
+                  'output': { 'default': 'ALL',
+                              'description': "Format of the returned array. 'ALL' "
+                                             'returns the full softmax distribution. '
+                                             "'ARG_MAX'/'ARG_MAX_INDICATOR' return 1 "
+                                             'at the single highest-value element, 0 '
+                                             "elsewhere. 'MAX_VAL' returns the softmax "
+                                             'value at the max position(s), 0 '
+                                             "elsewhere. 'MAX_INDICATOR' returns 1 at "
+                                             "all max-value positions. 'PROB' "
+                                             'stochastically selects one element '
+                                             'proportional to softmax probabilities.',
                               'enum': [ 'ALL',
                                         'ARG_MAX',
                                         'ARG_MAX_INDICATOR',
@@ -79,14 +91,16 @@ TOOL_PARAMETERS = { 'properties': { 'adapt_base': { 'description': 'Base additiv
                                         'MAX_INDICATOR',
                                         'PROB'],
                               'type': 'string'},
-                  'per_item': { 'description': 'For 2D input variables, if true '
-                                               'applies softmax independently to each '
-                                               'row; if false applies softmax to the '
-                                               'entire 2D array. Default: true.',
+                  'per_item': { 'default': True,
+                                'description': 'For 2d input arrays, whether to apply '
+                                               'softmax independently to each row '
+                                               '(true) or across the entire 2d array '
+                                               'as a flat vector (false). Defaults to '
+                                               'true.',
                                 'type': 'boolean'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = "CRITICAL (from confirmed runtime failures): `SoftMax.__init__()` does NOT accept a `name` argument — passing it raises TypeError. Do not include `name` in the kwargs under any circumstances.\n\n- If the input variable is all zeros, the SoftMax returns all zeros (no error).\n- `mask_threshold` is silently ignored when `gain='ADAPTIVE'`; similarly, `adapt_scale`, `adapt_base`, and `adapt_entropy_weighting` have no effect unless `gain='ADAPTIVE'`.\n- Sparse/one-hot inputs in longer vectors: the softmax peak mass diminishes with vector length (e.g., [1,0] → 0.73 vs [1,0,0,0] → 0.48). Use `mask_threshold` (scalar gain) or `gain='ADAPTIVE'` to compensate.\n- `output='PROB'` raises an exception when calling `.derivative()`, since the chosen element is ambiguous.\n- The LLVM execution path only supports `ARG_MAX`, `ARG_MAX_INDICATOR`, `MAX_VAL`, `MAX_INDICATOR` for derivatives; `ALL` is supported for forward pass.\n- `mask_threshold` requires that gain is a positive scalar; a warning (not error) is issued if the input contains negative values when masking is active."
+TOOL_NOTES = "CRITICAL: `name` is NOT a valid constructor argument for SoftMax despite appearing in the docstring. Passing `name` causes `TypeError: SoftMax.__init__() got an unexpected keyword argument 'name'` — do not include it.\n\nThe `adapt_entropy_weighting` default in the source code is 0.95, not 0.1 as stated in the docstring — use 0.95.\n\nWhen `gain='ADAPTIVE'`, `mask_threshold` is silently ignored regardless of its value.\n\nWhen `output` is anything other than `'ALL'`, the derivative method will raise an error for `'PROB'` — avoid calling derivative on a PROB-output SoftMax.\n\nIf the input variable is all zeros, SoftMax returns all zeros (not a uniform distribution).\n\nFor sparse/one-hot inputs, the max value after softmax shrinks as vector length grows (e.g., [1,0] → 0.73 but [1,0,0,0] → 0.48 at the max). Use `gain='ADAPTIVE'` or `mask_threshold` to compensate."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -111,5 +125,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_soft_max(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to create a SoftMax transfer function object that normalizes a numeric array into a probability distribution.'
+        'Call this tool to create a PsyNeuLink `SoftMax` Function instance that applies the softmax transformation to a numeric array.'
         return _impl(args or {})

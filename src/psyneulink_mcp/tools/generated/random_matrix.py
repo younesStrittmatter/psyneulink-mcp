@@ -10,30 +10,40 @@ import psyneulink as pnl
 from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
-__source_sha256__ = '6ce9017a4a05c18cb0ad8644eb4ec85db72148f92bcfda955951ab84d198fefc'
-__pnl_qualname__ = 'psyneulink.RandomMatrix'
-__pnl_kind__ = 'class'
+__source_sha256__ = '693113c1f62e17a3448260c393b6613a50f95a30efec54ad8e2573ff58d7e06c'
+__pnl_qualname__ = 'psyneulink.random_matrix'
+__pnl_kind__ = 'function'
 __generated_by__ = 'claude_cli@sonnet'
 
-TOOL_NAME = 'create_random_matrix'
-TOOL_DESCRIPTION = 'Call this tool when you need a random weight matrix initializer for a MappingProjection, Pathway, or add_linear_processing_pathway — anywhere PsyNeuLink accepts a matrix specification. Returns a RandomMatrix object whose elements are drawn uniformly from [center - range/2, center + range/2] (approximately), usable directly as the `matrix` argument of a MappingProjection or as the default projection matrix in pathway construction.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "center": {\n      "default": 0,\n      "description": "Center of the uniform distribution from which matrix elements are drawn. Default 0.0.",\n      "type": "number"\n    },\n    "range": {\n      "default": 1,\n      "description": "Width of the uniform distribution. Elements span approximately center \\u00b1 range/2. Default 1.0.",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nThe internal mapping is offset = center - 0.5 and scale = range, so elements are drawn from [center - 0.5, center - 0.5 + range], not a symmetric interval around center. For a symmetric distribution centered at 0 with spread 1, the defaults (center=0.0, range=1.0) produce elements in [-0.5, 0.5]. This tool instantiates the RandomMatrix initializer object; the actual matrix is only generated when PsyNeuLink calls it with sender_size and receiver_size internally — you do not pass those here.'
-TOOL_PARAMETERS = { 'properties': { 'center': { 'default': 0,
-                              'description': 'Center of the uniform distribution from '
-                                             'which matrix elements are drawn. Default '
-                                             '0.0.',
-                              'type': 'number'},
-                  'range': { 'default': 1,
-                             'description': 'Width of the uniform distribution. '
-                                            'Elements span approximately center ± '
-                                            'range/2. Default 1.0.',
+TOOL_NAME = 'random_matrix'
+TOOL_DESCRIPTION = 'Call this tool when you need to generate a random 2D weight matrix for initializing a PsyNeuLink Projection or Mechanism parameter. Returns a 2D numpy array of shape (num_rows × num_cols) where each entry is (uniform_random[0,1] + offset) * scale — by default, floats uniformly distributed in [0, 1].\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix (e.g., size of the receiving layer).",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix (e.g., size of the sending layer).",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Amount added to each random value before scaling. Use -0.5 or the string \'zero_center\' to center values around 0 (range [-0.5, 0.5] before scaling). Any other string raises an error.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative factor applied after offset. Use values > 1 to widen the range, < 1 to narrow it.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nThe docstring incorrectly states \'ZERO_CENTER\' maps to -0.05; the source code maps it to -0.5. Trust the source: \'zero_center\' → offset = -0.5, producing values in roughly [-0.5, 0.5] before scaling. The string comparison is case-insensitive (offset.upper() == \'ZERO_CENTER\'). Any other string value for offset raises UtilitiesError. The return value is a numpy ndarray, not a Python list — pass it directly as a matrix argument to PsyNeuLink components.'
+TOOL_PARAMETERS = { 'properties': { 'num_cols': { 'description': 'Number of columns in the output matrix '
+                                               '(e.g., size of the receiving layer).',
+                                'type': 'integer'},
+                  'num_rows': { 'description': 'Number of rows in the output matrix '
+                                               '(e.g., size of the sending layer).',
+                                'type': 'integer'},
+                  'offset': { 'default': 0,
+                              'description': 'Amount added to each random value before '
+                                             'scaling. Use -0.5 or the string '
+                                             "'zero_center' to center values around 0 "
+                                             '(range [-0.5, 0.5] before scaling). Any '
+                                             'other string raises an error.',
+                              'oneOf': [ {'type': 'number'},
+                                         { 'enum': ['zero_center', 'ZERO_CENTER'],
+                                           'type': 'string'}]},
+                  'scale': { 'default': 1,
+                             'description': 'Multiplicative factor applied after '
+                                            'offset. Use values > 1 to widen the '
+                                            'range, < 1 to narrow it.',
                              'type': 'number'}},
-  'required': [],
+  'required': ['num_rows', 'num_cols'],
   'type': 'object'}
-TOOL_NOTES = 'The internal mapping is offset = center - 0.5 and scale = range, so elements are drawn from [center - 0.5, center - 0.5 + range], not a symmetric interval around center. For a symmetric distribution centered at 0 with spread 1, the defaults (center=0.0, range=1.0) produce elements in [-0.5, 0.5]. This tool instantiates the RandomMatrix initializer object; the actual matrix is only generated when PsyNeuLink calls it with sender_size and receiver_size internally — you do not pass those here.'
+TOOL_NOTES = "The docstring incorrectly states 'ZERO_CENTER' maps to -0.05; the source code maps it to -0.5. Trust the source: 'zero_center' → offset = -0.5, producing values in roughly [-0.5, 0.5] before scaling. The string comparison is case-insensitive (offset.upper() == 'ZERO_CENTER'). Any other string value for offset raises UtilitiesError. The return value is a numpy ndarray, not a Python list — pass it directly as a matrix argument to PsyNeuLink components."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
-    target = pnl.RandomMatrix
+    target = pnl.random_matrix
     resolved = handles.resolve_in(kwargs)
     result = target(**resolved)
     try:
@@ -53,6 +63,6 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
-    def create_random_matrix(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool when you need a random weight matrix initializer for a MappingProjection, Pathway, or add_linear_processing_pathway — anywhere PsyNeuLink accepts a matrix specification.'
+    def random_matrix(args: dict[str, Any] | None = None) -> Any:
+        'Call this tool when you need to generate a random 2D weight matrix for initializing a PsyNeuLink Projection or Mechanism parameter.'
         return _impl(args or {})

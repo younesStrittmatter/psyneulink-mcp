@@ -17,70 +17,43 @@ __pnl_kind__ = 'method'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'add_projection'
-TOOL_DESCRIPTION = 'Call this tool to wire two nodes (Mechanisms or Compositions) in a Composition with a projection — either by letting PNL create a default MappingProjection between sender and receiver, or by supplying an explicit projection handle. The tool auto-adds sender and receiver to the composition before creating the projection, so `add_node` calls are not required first. Retrying an identical call is safe: duplicate projections are silently treated as success and the existing projection is returned.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string for the target Composition, as returned by create_composition.",\n      "type": "string"\n    },\n    "default_matrix": {\n      "description": "Matrix to use when creating a default MappingProjection. Only applied when no explicit projection is specified and none already exists between sender and receiver. Keyword strings and the \'matrix\' alias are both accepted by the runtime.",\n      "oneOf": [\n        {\n          "description": "PNL matrix keyword. Use FULL_CONNECTIVITY_MATRIX when sender and receiver have different sizes; IDENTITY_MATRIX requires equal sizes.",\n          "enum": [\n            "IDENTITY_MATRIX",\n            "FULL_CONNECTIVITY_MATRIX",\n            "HOLLOW_MATRIX",\n            "RANDOM_CONNECTIVITY_MATRIX"\n          ],\n          "type": "string"\n        },\n        {\n          "description": "Explicit 2-D numeric matrix (rows = sender output size, cols = receiver input size).",\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "feedback": {\n      "default": false,\n      "description": "If true, designates the projection as a feedback projection, breaking cycles in the graph. If false, the projection is never treated as feedback even if PNL would default to that.",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Optional name for the new projection.",\n      "type": "string"\n    },\n    "projection": {\n      "description": "Optional handle string for a pre-existing Projection object to add. Omit to create a default MappingProjection between sender and receiver.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Handle string for the receiver: a Mechanism, Composition, or InputPort handle. Required when no explicit projection handle is given.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Handle string for the sender: a Mechanism, Composition, or OutputPort handle. Required when no explicit projection handle is given.",\n      "type": "string"\n    }\n  },\n  "required": [\n    "composition"\n  ],\n  "type": "object"\n}\n\nNotes:\nIDENTITY_MATRIX requires sender output size == receiver input size exactly; passing it across mechanisms with different sizes raises FunctionError (confirmed in recent failures: sender=25, receiver=20). Use FULL_CONNECTIVITY_MATRIX for cross-size connections or omit default_matrix to let PNL choose. The runtime accepts either `default_matrix` or the legacy `matrix` kwarg name and translates both to PNL\'s `default_matrix`. DuplicateProjectionError is silently swallowed as a no-op — the call returns the existing projection. Both sender and receiver are defensively added to the composition before projection creation, so CompositionError "not (yet) in it" will not occur. If both sender and receiver are omitted, the projection handle must already encode its endpoints.'
-TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle string for the target '
-                                                  'Composition, as returned by '
-                                                  'create_composition.',
+TOOL_DESCRIPTION = 'Call this to wire two nodes in a Composition with a directed projection. Use it whenever you need to connect a sender Mechanism/OutputPort to a receiver Mechanism/InputPort — the runtime automatically adds both nodes to the composition first, so you do NOT need to call add_node beforehand. Returns the projection handle on success; retrying with the same sender/receiver is safe (duplicate projections are silently treated as success).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string of the Composition (returned by create_composition) to add the projection to.",\n      "type": "string"\n    },\n    "default_matrix": {\n      "description": "Matrix for the default MappingProjection when no projection is specified. Accepts a PNL keyword string: FULL_CONNECTIVITY_MATRIX, IDENTITY_MATRIX, HOLLOW_MATRIX, RANDOM_CONNECTIVITY_MATRIX. IDENTITY_MATRIX requires sender and receiver to have the same output/input size \\u2014 use FULL_CONNECTIVITY_MATRIX when sizes differ.",\n      "type": "string"\n    },\n    "feedback": {\n      "default": false,\n      "description": "If true, the projection is always designated as a feedback projection to break a cycle. If false (default), it is never designated as feedback even if PNL would do so by default.",\n      "type": "boolean"\n    },\n    "name": {\n      "description": "Optional name for the new projection.",\n      "type": "string"\n    },\n    "receiver": {\n      "description": "Handle string of the receiving Mechanism, nested Composition, or InputPort.",\n      "type": "string"\n    },\n    "sender": {\n      "description": "Handle string of the sending Mechanism, nested Composition, or OutputPort.",\n      "type": "string"\n    }\n  },\n  "required": [\n    "composition",\n    "sender",\n    "receiver"\n  ],\n  "type": "object"\n}\n\nNotes:\nIDENTITY_MATRIX requires sender output size == receiver input size exactly; passing it between nodes of different sizes raises FunctionError (e.g., sender=25, receiver=20). Use FULL_CONNECTIVITY_MATRIX when sizes differ — it works for any sender/receiver size combination. The runtime helper resolves all handle strings to live PNL objects before dispatching, and defensively adds sender and receiver to the composition (PNL no-ops if already present). DuplicateProjectionError is caught and treated as no-op success, so retrying is safe. The underlying PNL parameter is default_matrix (not matrix); both names are accepted by the runtime but the schema advertises default_matrix.'
+TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle string of the Composition '
+                                                  '(returned by create_composition) to '
+                                                  'add the projection to.',
                                    'type': 'string'},
-                  'default_matrix': { 'description': 'Matrix to use when creating a '
-                                                     'default MappingProjection. Only '
-                                                     'applied when no explicit '
-                                                     'projection is specified and none '
-                                                     'already exists between sender '
-                                                     'and receiver. Keyword strings '
-                                                     "and the 'matrix' alias are both "
-                                                     'accepted by the runtime.',
-                                      'oneOf': [ { 'description': 'PNL matrix keyword. '
-                                                                  'Use '
-                                                                  'FULL_CONNECTIVITY_MATRIX '
-                                                                  'when sender and '
-                                                                  'receiver have '
-                                                                  'different sizes; '
-                                                                  'IDENTITY_MATRIX '
-                                                                  'requires equal '
-                                                                  'sizes.',
-                                                   'enum': [ 'IDENTITY_MATRIX',
-                                                             'FULL_CONNECTIVITY_MATRIX',
-                                                             'HOLLOW_MATRIX',
-                                                             'RANDOM_CONNECTIVITY_MATRIX'],
-                                                   'type': 'string'},
-                                                 { 'description': 'Explicit 2-D '
-                                                                  'numeric matrix '
-                                                                  '(rows = sender '
-                                                                  'output size, cols = '
-                                                                  'receiver input '
-                                                                  'size).',
-                                                   'items': { 'items': { 'type': 'number'},
-                                                              'type': 'array'},
-                                                   'type': 'array'}]},
+                  'default_matrix': { 'description': 'Matrix for the default '
+                                                     'MappingProjection when no '
+                                                     'projection is specified. Accepts '
+                                                     'a PNL keyword string: '
+                                                     'FULL_CONNECTIVITY_MATRIX, '
+                                                     'IDENTITY_MATRIX, HOLLOW_MATRIX, '
+                                                     'RANDOM_CONNECTIVITY_MATRIX. '
+                                                     'IDENTITY_MATRIX requires sender '
+                                                     'and receiver to have the same '
+                                                     'output/input size — use '
+                                                     'FULL_CONNECTIVITY_MATRIX when '
+                                                     'sizes differ.',
+                                      'type': 'string'},
                   'feedback': { 'default': False,
-                                'description': 'If true, designates the projection as '
-                                               'a feedback projection, breaking cycles '
-                                               'in the graph. If false, the projection '
-                                               'is never treated as feedback even if '
-                                               'PNL would default to that.',
+                                'description': 'If true, the projection is always '
+                                               'designated as a feedback projection to '
+                                               'break a cycle. If false (default), it '
+                                               'is never designated as feedback even '
+                                               'if PNL would do so by default.',
                                 'type': 'boolean'},
                   'name': { 'description': 'Optional name for the new projection.',
                             'type': 'string'},
-                  'projection': { 'description': 'Optional handle string for a '
-                                                 'pre-existing Projection object to '
-                                                 'add. Omit to create a default '
-                                                 'MappingProjection between sender and '
-                                                 'receiver.',
-                                  'type': 'string'},
-                  'receiver': { 'description': 'Handle string for the receiver: a '
-                                               'Mechanism, Composition, or InputPort '
-                                               'handle. Required when no explicit '
-                                               'projection handle is given.',
+                  'receiver': { 'description': 'Handle string of the receiving '
+                                               'Mechanism, nested Composition, or '
+                                               'InputPort.',
                                 'type': 'string'},
-                  'sender': { 'description': 'Handle string for the sender: a '
-                                             'Mechanism, Composition, or OutputPort '
-                                             'handle. Required when no explicit '
-                                             'projection handle is given.',
+                  'sender': { 'description': 'Handle string of the sending Mechanism, '
+                                             'nested Composition, or OutputPort.',
                               'type': 'string'}},
-  'required': ['composition'],
+  'required': ['composition', 'sender', 'receiver'],
   'type': 'object'}
-TOOL_NOTES = 'IDENTITY_MATRIX requires sender output size == receiver input size exactly; passing it across mechanisms with different sizes raises FunctionError (confirmed in recent failures: sender=25, receiver=20). Use FULL_CONNECTIVITY_MATRIX for cross-size connections or omit default_matrix to let PNL choose. The runtime accepts either `default_matrix` or the legacy `matrix` kwarg name and translates both to PNL\'s `default_matrix`. DuplicateProjectionError is silently swallowed as a no-op — the call returns the existing projection. Both sender and receiver are defensively added to the composition before projection creation, so CompositionError "not (yet) in it" will not occur. If both sender and receiver are omitted, the projection handle must already encode its endpoints.'
+TOOL_NOTES = 'IDENTITY_MATRIX requires sender output size == receiver input size exactly; passing it between nodes of different sizes raises FunctionError (e.g., sender=25, receiver=20). Use FULL_CONNECTIVITY_MATRIX when sizes differ — it works for any sender/receiver size combination. The runtime helper resolves all handle strings to live PNL objects before dispatching, and defensively adds sender and receiver to the composition (PNL no-ops if already present). DuplicateProjectionError is caught and treated as no-op success, so retrying is safe. The underlying PNL parameter is default_matrix (not matrix); both names are accepted by the runtime but the schema advertises default_matrix.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -96,5 +69,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def add_projection(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to wire two nodes (Mechanisms or Compositions) in a Composition with a projection — either by letting PNL create a default MappingProjection between sender and receiver, or by supplying an explicit projection handle.'
+        'Call this to wire two nodes in a Composition with a directed projection.'
         return _impl(args or {})

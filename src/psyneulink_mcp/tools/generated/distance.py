@@ -11,33 +11,37 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = '782598fd62b19cbfe0010a364ae738ba89ae92167898febb4434695f40e772f3'
-__pnl_qualname__ = 'psyneulink.core.components.mechanisms.processing.transfermechanism.Distance'
+__pnl_qualname__ = 'psyneulink.library.components.mechanisms.processing.transfer.lcamechanism.Distance'
 __pnl_kind__ = 'class'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_distance'
-TOOL_DESCRIPTION = 'Call this tool to create a `Distance` function object that computes a scalar distance between two equal-length numeric vectors. Use it when you need a reusable distance-metric function to attach to a PsyNeuLink component (e.g., as an objective function for a mechanism). The constructed object can then be called with a 2-item 2d array to produce a scalar distance value.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "A 2-element array containing the two numeric vectors to compare, e.g. [[1,0,0],[0,1,0]]. Both inner arrays must have equal length. NOTE: use \'default_variable\', NOT \'variable\' \\u2014 passing \'variable\' raises TypeError.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "metric": {\n      "description": "Distance metric to use. Must be an exact lowercase string from the allowed set. Common choices: \'euclidean\' (L2 norm), \'cosine\' (1 - |cosine similarity|), \'correlation\' (1 - |Pearson r|), \'difference\' (L1 sum of abs diff), \'energy\' (-0.5 * dot product). Default is \'difference\'.",\n      "enum": [\n        "max_abs_diff",\n        "difference",\n        "dot_product",\n        "normed_L0_similarity",\n        "euclidean",\n        "angle",\n        "correlation",\n        "cosine",\n        "entropy",\n        "cross-entropy",\n        "energy"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "default": false,\n      "description": "If true, divides the result by the vector length (or length^2 for \'energy\'). Has NO effect for \'max_abs_diff\', \'correlation\', \'cosine\', or \'angle\' metrics. Default is false.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL — two bugs have been confirmed in production:\n1. Pass the two-vector input as `default_variable`, NOT `variable`. The constructor parameter is named `default_variable`; passing `variable` raises `TypeError: Distance.__init__() got an unexpected keyword argument \'variable\'`.\n2. The `metric` string must be lowercase exactly as listed in the enum (e.g. `\'cosine\'`, NOT `\'COSINE\'`). PNL uses beartype to enforce a Literal type — any uppercase or misspelled value raises `BeartypeCallHintParamViolation`.\nThe docstring incorrectly states the default metric is EUCLIDEAN; the actual default (from the Parameters class) is `\'difference\'` (L1 sum of absolute differences).\n`normalize` is silently ignored for `\'max_abs_diff\'`, `\'correlation\'`, `\'cosine\'`, and `\'angle\'` — no error is raised.\n`\'cross-entropy\'` requires all values to be in [0, 1]; zeros are replaced with EPSILON internally to avoid log(0).'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'A 2-element array containing '
-                                                       'the two numeric vectors to '
-                                                       'compare, e.g. '
-                                                       '[[1,0,0],[0,1,0]]. Both inner '
+TOOL_DESCRIPTION = 'Call this tool to instantiate a Distance function that computes a scalar distance or similarity between two equal-length vectors using a specified metric. Returns a Distance object suitable for use as an ObjectiveFunction in PsyNeuLink mechanisms. Do NOT pass `variable` to the constructor — input vectors are supplied at execution time (via `default_variable` only if you need to fix the array shape at construction).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Optional 2-element array [[v1...], [v2...]] that fixes the expected input shape at construction time. Both inner arrays must have equal length. Omit in most cases \\u2014 input is provided at execution time.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "maxItems": 2,\n      "minItems": 2,\n      "type": "array"\n    },\n    "metric": {\n      "default": "euclidean",\n      "description": "Distance metric to use. Must be lowercase. \'euclidean\': L2 norm; \'cosine\': 1 - |cosine similarity|; \'correlation\': 1 - |Pearson r|; \'difference\': sum of absolute differences; \'dot_product\': inner product; \'energy\': -0.5 * dot product; \'cross-entropy\': cross-entropy of v1 w.r.t. v2; \'max_abs_diff\': maximum elementwise absolute difference; \'normed_L0_similarity\': L0 similarity normalized to [0,1].",\n      "enum": [\n        "max_abs_diff",\n        "difference",\n        "dot_product",\n        "normed_L0_similarity",\n        "euclidean",\n        "angle",\n        "correlation",\n        "cosine",\n        "entropy",\n        "cross-entropy",\n        "energy"\n      ],\n      "type": "string"\n    },\n    "normalize": {\n      "default": false,\n      "description": "If true, divides the result by the length of the input vectors. Has no effect for \'max_abs_diff\', \'correlation\', \'cosine\', or \'angle\' metrics.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nCRITICAL: Do NOT pass `variable` as a constructor argument — Distance.__init__() rejects it with TypeError. The input vectors are provided at execution time. If you need to pre-declare the input shape, use `default_variable` instead (a 2-item list of equal-length numeric lists).\n\nMetric values are case-sensitive and must be lowercase (e.g., `\'cosine\'`, not `\'COSINE\'`). Passing an uppercase metric string raises a BeartypeCallHintParamViolation. The valid set is exactly: \'max_abs_diff\', \'difference\', \'dot_product\', \'normed_L0_similarity\', \'euclidean\', \'angle\', \'correlation\', \'cosine\', \'entropy\', \'cross-entropy\', \'energy\'.\n\nThe internal default metric in Parameters is DIFFERENCE, but the docstring advertises EUCLIDEAN — when in doubt, specify explicitly.\n\n`normalize` is silently ignored for \'max_abs_diff\', \'correlation\', \'cosine\', and \'angle\' metrics.\n\nFor \'energy\': result = -0.5 * dot(v1, v2); normalization divides by len(v1)^2. For \'cosine\'/\'correlation\': result is 1 - |similarity|, so 0 means identical, 1 means orthogonal/uncorrelated.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Optional 2-element array '
+                                                       '[[v1...], [v2...]] that fixes '
+                                                       'the expected input shape at '
+                                                       'construction time. Both inner '
                                                        'arrays must have equal length. '
-                                                       "NOTE: use 'default_variable', "
-                                                       "NOT 'variable' — passing "
-                                                       "'variable' raises TypeError.",
+                                                       'Omit in most cases — input is '
+                                                       'provided at execution time.',
                                         'items': { 'items': {'type': 'number'},
                                                    'type': 'array'},
                                         'maxItems': 2,
                                         'minItems': 2,
                                         'type': 'array'},
-                  'metric': { 'description': 'Distance metric to use. Must be an exact '
-                                             'lowercase string from the allowed set. '
-                                             "Common choices: 'euclidean' (L2 norm), "
-                                             "'cosine' (1 - |cosine similarity|), "
-                                             "'correlation' (1 - |Pearson r|), "
-                                             "'difference' (L1 sum of abs diff), "
-                                             "'energy' (-0.5 * dot product). Default "
-                                             "is 'difference'.",
+                  'metric': { 'default': 'euclidean',
+                              'description': 'Distance metric to use. Must be '
+                                             "lowercase. 'euclidean': L2 norm; "
+                                             "'cosine': 1 - |cosine similarity|; "
+                                             "'correlation': 1 - |Pearson r|; "
+                                             "'difference': sum of absolute "
+                                             "differences; 'dot_product': inner "
+                                             "product; 'energy': -0.5 * dot product; "
+                                             "'cross-entropy': cross-entropy of v1 "
+                                             "w.r.t. v2; 'max_abs_diff': maximum "
+                                             'elementwise absolute difference; '
+                                             "'normed_L0_similarity': L0 similarity "
+                                             'normalized to [0,1].',
                               'enum': [ 'max_abs_diff',
                                         'difference',
                                         'dot_product',
@@ -52,15 +56,14 @@ TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'A 2-el
                               'type': 'string'},
                   'normalize': { 'default': False,
                                  'description': 'If true, divides the result by the '
-                                                'vector length (or length^2 for '
-                                                "'energy'). Has NO effect for "
-                                                "'max_abs_diff', 'correlation', "
-                                                "'cosine', or 'angle' metrics. Default "
-                                                'is false.',
+                                                'length of the input vectors. Has no '
+                                                "effect for 'max_abs_diff', "
+                                                "'correlation', 'cosine', or 'angle' "
+                                                'metrics.',
                                  'type': 'boolean'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = "CRITICAL — two bugs have been confirmed in production:\n1. Pass the two-vector input as `default_variable`, NOT `variable`. The constructor parameter is named `default_variable`; passing `variable` raises `TypeError: Distance.__init__() got an unexpected keyword argument 'variable'`.\n2. The `metric` string must be lowercase exactly as listed in the enum (e.g. `'cosine'`, NOT `'COSINE'`). PNL uses beartype to enforce a Literal type — any uppercase or misspelled value raises `BeartypeCallHintParamViolation`.\nThe docstring incorrectly states the default metric is EUCLIDEAN; the actual default (from the Parameters class) is `'difference'` (L1 sum of absolute differences).\n`normalize` is silently ignored for `'max_abs_diff'`, `'correlation'`, `'cosine'`, and `'angle'` — no error is raised.\n`'cross-entropy'` requires all values to be in [0, 1]; zeros are replaced with EPSILON internally to avoid log(0)."
+TOOL_NOTES = "CRITICAL: Do NOT pass `variable` as a constructor argument — Distance.__init__() rejects it with TypeError. The input vectors are provided at execution time. If you need to pre-declare the input shape, use `default_variable` instead (a 2-item list of equal-length numeric lists).\n\nMetric values are case-sensitive and must be lowercase (e.g., `'cosine'`, not `'COSINE'`). Passing an uppercase metric string raises a BeartypeCallHintParamViolation. The valid set is exactly: 'max_abs_diff', 'difference', 'dot_product', 'normed_L0_similarity', 'euclidean', 'angle', 'correlation', 'cosine', 'entropy', 'cross-entropy', 'energy'.\n\nThe internal default metric in Parameters is DIFFERENCE, but the docstring advertises EUCLIDEAN — when in doubt, specify explicitly.\n\n`normalize` is silently ignored for 'max_abs_diff', 'correlation', 'cosine', and 'angle' metrics.\n\nFor 'energy': result = -0.5 * dot(v1, v2); normalization divides by len(v1)^2. For 'cosine'/'correlation': result is 1 - |similarity|, so 0 means identical, 1 means orthogonal/uncorrelated."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -85,5 +88,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_distance(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to create a `Distance` function object that computes a scalar distance between two equal-length numeric vectors.'
+        'Call this tool to instantiate a Distance function that computes a scalar distance or similarity between two equal-length vectors using a specified metric.'
         return _impl(args or {})

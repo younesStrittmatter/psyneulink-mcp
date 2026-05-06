@@ -17,50 +17,47 @@ __pnl_kind__ = 'method'
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'add_linear_processing_pathway'
-TOOL_DESCRIPTION = 'Call this tool after creating a Composition and all required Mechanism/node handles to wire them into a sequential feed-forward processing chain. Pass an ordered list of node handles in `pathway`; auto-created MappingProjections connect each consecutive pair. Returns a serialized Pathway handle representing the wired sequence.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string for the target Composition, as returned by create_composition or an equivalent constructor tool.",\n      "type": "string"\n    },\n    "default_projection_matrix": {\n      "description": "Numeric 2-D matrix (list of lists of numbers) to use for all auto-created MappingProjections that are not otherwise specified. Omit to accept the MappingProjection default (identity-like). Do NOT pass PNL keyword strings such as \'FULL_CONNECTIVITY_MATRIX\' here \\u2014 they are not resolved and will raise a CompositionError.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "name": {\n      "description": "Optional name for the resulting Pathway object. Overrides any name embedded in a Pathway object passed as pathway.",\n      "type": "string"\n    },\n    "pathway": {\n      "description": "Ordered list of node handle strings (Mechanisms or nested Compositions). Handles are resolved to live PNL objects at call time. May optionally interleave projection handle strings between node handles to override auto-created MappingProjections for specific edges.",\n      "items": {\n        "type": "string"\n      },\n      "type": "array"\n    }\n  },\n  "required": [\n    "composition",\n    "pathway"\n  ],\n  "type": "object"\n}\n\nNotes:\nHISTORICAL FAILURE — do NOT pass PNL keyword strings (e.g. "FULL_CONNECTIVITY_MATRIX", "IDENTITY_MATRIX") as default_projection_matrix. The runtime helper does not resolve matrix-keyword strings, so PNL receives a bare string and raises CompositionError: Invalid projection (...). Use a numeric array (e.g. [[1,0],[0,1]]) or omit the argument entirely.\n\nIf pathway is a 2-item (Pathway, LearningFunction) tuple, the LearningFunction is silently ignored; use add_linear_learning_pathway instead if learning is needed.\n\nAny ControlMechanism in the pathway that already has monitor_for_control set, and any ObjectiveMechanism already projecting to a ControlMechanism, will be dropped from the auto-wiring step (a warning is emitted but no exception is raised).\n\nDuplicate pathway specifications (same nodes, same order) return the pre-existing Pathway rather than creating a new one.'
-TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle string for the target '
+TOOL_DESCRIPTION = 'Call this tool to wire an ordered sequence of Mechanism/Composition nodes into a feed-forward processing chain within an existing Composition. It registers each node, auto-creates MappingProjections between consecutive pairs, and returns a named Pathway object. Use it whenever you want to connect two or more nodes in sequence rather than adding nodes and projections individually.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "composition": {\n      "description": "Handle string of the target Composition, as returned by create_composition.",\n      "type": "string"\n    },\n    "default_projection_matrix": {\n      "description": "Numeric weight matrix (list of lists of numbers) used for any auto-created MappingProjection that has no explicit specification. Omit to use the MappingProjection default (identity-like). Do NOT pass a string keyword such as \'FULL_CONNECTIVITY_MATRIX\' \\u2014 see notes.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "name": {\n      "description": "Optional name for the resulting Pathway object. Overrides any name carried by a Pathway object passed in pathway.",\n      "type": "string"\n    },\n    "pathway": {\n      "description": "Ordered list of node handle strings (Mechanism or nested Composition handles). Projection handle strings may be interleaved between node handles to specify explicit connectivity; any adjacent pair of node handles without an intervening Projection handle receives an auto-created MappingProjection.",\n      "items": {\n        "type": "string"\n      },\n      "type": "array"\n    }\n  },\n  "required": [\n    "composition",\n    "pathway"\n  ],\n  "type": "object"\n}\n\nNotes:\nFULL_CONNECTIVITY_MATRIX and other PNL MATRIX_KEYWORD strings must NOT be passed as the default_projection_matrix value. The runtime helper does not resolve matrix keyword strings, so they reach PNL as plain Python strings and cause CompositionError: Invalid projection … specified. Use a numeric matrix (list of lists) or omit the parameter entirely (confirmed failure: issues #19, auto-feedback 2026-05-06).\n\nControlMechanism nodes placed in the pathway will NOT receive a MappingProjection from their predecessor — ControlMechanisms can only have ControlProjections as efferents. PNL will instead wire a MappingProjection from the last non-ControlMechanism node to the successor, and emit a warning.\n\nIf a 2-item (Pathway, LearningFunction) tuple is passed as pathway, the LearningFunction is silently ignored. Use add_linear_learning_pathway instead if learning is required.\n\nDuplicate pathway detection: if the resulting pathway is identical to one already in the Composition, the existing Pathway is returned and a warning is issued — no error is raised.'
+TOOL_PARAMETERS = { 'properties': { 'composition': { 'description': 'Handle string of the target '
                                                   'Composition, as returned by '
-                                                  'create_composition or an equivalent '
-                                                  'constructor tool.',
+                                                  'create_composition.',
                                    'type': 'string'},
-                  'default_projection_matrix': { 'description': 'Numeric 2-D matrix '
+                  'default_projection_matrix': { 'description': 'Numeric weight matrix '
                                                                 '(list of lists of '
-                                                                'numbers) to use for '
-                                                                'all auto-created '
-                                                                'MappingProjections '
-                                                                'that are not '
-                                                                'otherwise specified. '
-                                                                'Omit to accept the '
+                                                                'numbers) used for any '
+                                                                'auto-created '
+                                                                'MappingProjection '
+                                                                'that has no explicit '
+                                                                'specification. Omit '
+                                                                'to use the '
                                                                 'MappingProjection '
                                                                 'default '
                                                                 '(identity-like). Do '
-                                                                'NOT pass PNL keyword '
-                                                                'strings such as '
+                                                                'NOT pass a string '
+                                                                'keyword such as '
                                                                 "'FULL_CONNECTIVITY_MATRIX' "
-                                                                'here — they are not '
-                                                                'resolved and will '
-                                                                'raise a '
-                                                                'CompositionError.',
+                                                                '— see notes.',
                                                  'items': { 'items': {'type': 'number'},
                                                             'type': 'array'},
                                                  'type': 'array'},
                   'name': { 'description': 'Optional name for the resulting Pathway '
-                                           'object. Overrides any name embedded in a '
-                                           'Pathway object passed as pathway.',
+                                           'object. Overrides any name carried by a '
+                                           'Pathway object passed in pathway.',
                             'type': 'string'},
                   'pathway': { 'description': 'Ordered list of node handle strings '
-                                              '(Mechanisms or nested Compositions). '
-                                              'Handles are resolved to live PNL '
-                                              'objects at call time. May optionally '
-                                              'interleave projection handle strings '
-                                              'between node handles to override '
-                                              'auto-created MappingProjections for '
-                                              'specific edges.',
+                                              '(Mechanism or nested Composition '
+                                              'handles). Projection handle strings may '
+                                              'be interleaved between node handles to '
+                                              'specify explicit connectivity; any '
+                                              'adjacent pair of node handles without '
+                                              'an intervening Projection handle '
+                                              'receives an auto-created '
+                                              'MappingProjection.',
                                'items': {'type': 'string'},
                                'type': 'array'}},
   'required': ['composition', 'pathway'],
   'type': 'object'}
-TOOL_NOTES = 'HISTORICAL FAILURE — do NOT pass PNL keyword strings (e.g. "FULL_CONNECTIVITY_MATRIX", "IDENTITY_MATRIX") as default_projection_matrix. The runtime helper does not resolve matrix-keyword strings, so PNL receives a bare string and raises CompositionError: Invalid projection (...). Use a numeric array (e.g. [[1,0],[0,1]]) or omit the argument entirely.\n\nIf pathway is a 2-item (Pathway, LearningFunction) tuple, the LearningFunction is silently ignored; use add_linear_learning_pathway instead if learning is needed.\n\nAny ControlMechanism in the pathway that already has monitor_for_control set, and any ObjectiveMechanism already projecting to a ControlMechanism, will be dropped from the auto-wiring step (a warning is emitted but no exception is raised).\n\nDuplicate pathway specifications (same nodes, same order) return the pre-existing Pathway rather than creating a new one.'
+TOOL_NOTES = 'FULL_CONNECTIVITY_MATRIX and other PNL MATRIX_KEYWORD strings must NOT be passed as the default_projection_matrix value. The runtime helper does not resolve matrix keyword strings, so they reach PNL as plain Python strings and cause CompositionError: Invalid projection … specified. Use a numeric matrix (list of lists) or omit the parameter entirely (confirmed failure: issues #19, auto-feedback 2026-05-06).\n\nControlMechanism nodes placed in the pathway will NOT receive a MappingProjection from their predecessor — ControlMechanisms can only have ControlProjections as efferents. PNL will instead wire a MappingProjection from the last non-ControlMechanism node to the successor, and emit a warning.\n\nIf a 2-item (Pathway, LearningFunction) tuple is passed as pathway, the LearningFunction is silently ignored. Use add_linear_learning_pathway instead if learning is required.\n\nDuplicate pathway detection: if the resulting pathway is identical to one already in the Composition, the existing Pathway is returned and a warning is issued — no error is raised.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -76,5 +73,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def add_linear_processing_pathway(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool after creating a Composition and all required Mechanism/node handles to wire them into a sequential feed-forward processing chain.'
+        'Call this tool to wire an ordered sequence of Mechanism/Composition nodes into a feed-forward processing chain within an existing Composition.'
         return _impl(args or {})
