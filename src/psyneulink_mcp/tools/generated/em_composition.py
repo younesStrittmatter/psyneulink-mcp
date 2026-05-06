@@ -28,226 +28,136 @@ __pnl_parent_sha256s__ = {'AutodiffComposition': '216b828fe306c49eaec2babb8733db
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_em_composition'
-TOOL_DESCRIPTION = 'Build a differentiable, learnable episodic memory module (subclass of `AutodiffComposition`) where retrieval is a softmax over field-weighted dot-product (or 1-L0) similarities between input keys and stored entries, and storage replaces the weakest memory row at each execution step. Use this when you need content-addressable memory with multi-field keys/values, optional concatenation of keys, learnable field weights via backprop, and a storage probability — beyond what `AutodiffComposition`/`Composition` provide. Returns an EMComposition handle whose own nodes (query_input_nodes, value_input_nodes, retrieved_nodes, softmax_node, storage_node) are auto-built; treat the result as a single Composition Node when nesting.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "concatenate_queries": {\n      "default": false,\n      "description": "If true, concatenate all key inputs into a single vector before matching (one match_node total). Silently downgraded to false (with warning) unless num_keys>1, all key weights are equal, AND normalize_memories=true. Incompatible with learning of field weights.",\n      "type": "boolean"\n    },\n    "enable_learning": {\n      "default": true,\n      "description": "Wire backprop pathways for retrieved_nodes (subject to target_fields). Requires use_gating_for_weighting=False and softmax_choice=\'WEIGHTED_AVG\' at learn() time, otherwise raises. Has no effect when concatenate_queries is true or there is only one key.",\n      "type": "boolean"\n    },\n    "field_names": {\n      "default": null,\n      "description": "Names for each field, in memory_template order. Length must equal num_fields. Ignored (with warning) if `fields` is provided.",\n      "items": {\n        "type": "string"\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "field_weights": {\n      "default": null,\n      "description": "Per-field weight: positive number = KEY field with that contribution to matching; null = VALUE field (stored/retrieved, not matched). Length must equal num_fields, or 1 (broadcast). Cannot be all-null. Ignored (with warning) if `fields` is provided.",\n      "items": {\n        "type": [\n          "number",\n          "null"\n        ]\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "fields": {\n      "additionalProperties": {\n        "oneOf": [\n          {\n            "description": "[field_weight (number or null for value field), learn_field_weight (bool|number|null), target_field (bool)]",\n            "maxItems": 3,\n            "minItems": 3,\n            "type": "array"\n          },\n          {\n            "properties": {\n              "field_weight": {\n                "description": "null marks the field as a VALUE field (stored/retrieved but not used for matching); a positive number marks it as a KEY field with that weight.",\n                "type": [\n                  "number",\n                  "null"\n                ]\n              },\n              "learn_field_weight": {\n                "description": "false to disable learning for this field, true/null for default learning_rate, or a numeric per-field learning rate. Ignored for value fields."\n              },\n              "target_field": {\n                "description": "Whether to construct a learning pathway terminating at this field\'s retrieved_node.",\n                "type": "boolean"\n              }\n            },\n            "required": [\n              "field_weight",\n              "learn_field_weight",\n              "target_field"\n            ],\n            "type": "object"\n          }\n        ]\n      },\n      "default": null,\n      "description": "Per-field config keyed by field name. EACH value MUST be either (a) a 3-element array [field_weight, learn_field_weight, target_field], or (b) an object containing ALL three keys \'field_weight\', \'learn_field_weight\', \'target_field\' (lowercase). Partial dicts raise KeyError. When `fields` is given, do NOT also pass field_names/field_weights/learn_field_weights/target_fields \\u2014 they are silently overridden and warn.",\n      "type": [\n        "object",\n        "null"\n      ]\n    },\n    "learn_field_weights": {\n      "default": false,\n      "description": "Whether/how to learn each field\'s weight. bool applies to all keys; list (length num_fields) gives per-field bool or numeric learning rate. Forced False for value fields. Ignored (with warning) if `fields` is provided.",\n      "oneOf": [\n        {\n          "type": "boolean"\n        },\n        {\n          "items": {\n            "type": [\n              "boolean",\n              "number",\n              "null"\n            ]\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "learning_rate": {\n      "default": 0.01,\n      "description": "Default learning rate applied to any field weight whose learn_field_weights entry is True/None. Dict form is NOT supported by EMComposition (raises EMCompositionError) \\u2014 use `fields` or `learn_field_weights` for per-field rates.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "type": "boolean"\n        }\n      ]\n    },\n    "memory_capacity": {\n      "default": null,\n      "description": "Number of entries the memory can hold. Required if memory_template is a 2-tuple or a single-entry 2D template; otherwise defaults to 1000 or to len(memory_template) for 3D templates.",\n      "minimum": 1,\n      "type": [\n        "integer",\n        "null"\n      ]\n    },\n    "memory_decay_rate": {\n      "default": "AUTO",\n      "description": "Multiplicative decay applied to existing memories before each new write. Numeric in [0,1] (0 = no decay), or \'AUTO\' which sets it to 1/memory_capacity.",\n      "oneOf": [\n        {\n          "maximum": 1,\n          "minimum": 0,\n          "type": "number"\n        },\n        {\n          "enum": [\n            "AUTO"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "memory_fill": {\n      "default": 0,\n      "description": "Value used to populate empty slots: scalar (constant fill) or a 2-element [low, high] tuple (uniform random fill). Important when normalize_memories=True \\u2014 a field of all zeros causes a divide-by-zero warning at construction and NaN matches at runtime.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "maxItems": 2,\n          "minItems": 2,\n          "type": "array"\n        }\n      ]\n    },\n    "memory_template": {\n      "default": [\n        [\n          0\n        ],\n        [\n          0\n        ]\n      ],\n      "description": "Shape/content of an entry. (1) 2-tuple (num_fields, field_len) or 3-tuple (num_entries, num_fields, field_len) of ints \\u2014 shape only, contents come from memory_fill. (2) 2D list/array \\u2014 a single entry template, replicated memory_capacity times. (3) 3D list/array \\u2014 explicit per-entry contents (rows are entries, columns are fields). Fields may have different lengths only when given via list/array, not via tuple-of-ints.",\n      "oneOf": [\n        {\n          "items": {\n            "type": "integer"\n          },\n          "maxItems": 3,\n          "minItems": 2,\n          "type": "array"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        },\n        {\n          "items": {\n            "items": {\n              "items": {\n                "type": "number"\n              },\n              "type": "array"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "default": "EM_Composition",\n      "description": "Name of the EMComposition instance.",\n      "type": "string"\n    },\n    "normalize_field_weights": {\n      "default": true,\n      "description": "If true, key field_weights are renormalized to sum to 1; if false, used as absolute weights.",\n      "type": "boolean"\n    },\n    "normalize_memories": {\n      "default": true,\n      "description": "If true, queries and stored keys are L2-normalized before dot-product (cosine similarity). Required by concatenate_queries.",\n      "type": "boolean"\n    },\n    "purge_by_field_weights": {\n      "default": false,\n      "description": "If true, the row chosen for replacement on storage is the weakest after multiplying field norms by field_weights (so unweighted/value fields don\'t influence which slot is overwritten).",\n      "type": "boolean"\n    },\n    "seed": {\n      "default": null,\n      "description": "Seed for the random_state used by storage_prob and random memory_fill.",\n      "type": [\n        "integer",\n        "null"\n      ]\n    },\n    "softmax_choice": {\n      "default": "WEIGHTED_AVG",\n      "description": "How softmax output is used for retrieval. WEIGHTED_AVG = standard softmax-weighted average over entries (the only choice compatible with learning). ARG_MAX = pick the single best-matching entry (internally rewritten to ARG_MAX_INDICATOR). NOTE: \'PROBABILISTIC\' appears in the docstring but is BROKEN in the current PNL build \\u2014 it is forwarded raw to OneHot.mode which only accepts {\'PROB\',\'PROB_INDICATOR\',...}, so it raises a Beartype error at construction. Do not use it.",\n      "enum": [\n        "WEIGHTED_AVG",\n        "ARG_MAX"\n      ],\n      "type": "string"\n    },\n    "softmax_gain": {\n      "default": 1,\n      "description": "Inverse-temperature for the retrieval softmax. Numeric scalar OR the keyword \'ADAPTIVE\' (entropy-weighted) OR \'CONTROL\' (constructs a SOFTMAX GAIN CONTROL node that adapts gain at runtime; this also forces softmax_gain to be non-modulable).",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "ADAPTIVE",\n            "CONTROL"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "softmax_threshold": {\n      "default": 0.001,\n      "description": "Mask cutoff: values below this are zeroed before softmax. Must be > 0 if not null.",\n      "type": [\n        "number",\n        "null"\n      ]\n    },\n    "storage_prob": {\n      "default": 1,\n      "description": "Per-execution probability that the current input is written into memory. 0 disables storage; 1 always stores.",\n      "maximum": 1,\n      "minimum": 0,\n      "type": "number"\n    },\n    "store_on_optimization": {\n      "default": "FIRST",\n      "description": "Which optimization step(s) inside a learning trial actually store an entry.",\n      "enum": [\n        "FIRST",\n        "LAST",\n        "ALL"\n      ],\n      "type": "string"\n    },\n    "target_fields": {\n      "default": null,\n      "description": "Per-field bool: which retrieved fields should receive an error signal during learning. Length must equal num_fields. Ignored (with warning) if `fields` is provided.",\n      "items": {\n        "type": "boolean"\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "use_gating_for_weighting": {\n      "default": false,\n      "description": "If true, weight match outputs via output gating (GatingMechanism) instead of multiplicative ProcessingMechanisms; in that case no weighted_match_nodes are built and field weights cannot be learned (must combine with enable_learning=False).",\n      "type": "boolean"\n    },\n    "use_storage_node": {\n      "default": true,\n      "description": "If true (recommended/default), an EMStorageMechanism handles writes. If false, storage runs as a Composition method instead \\u2014 debug only, and prevents the EMComposition from being imported into another Composition via import_composition.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nFEEDBACK-DRIVEN GOTCHAS:\n\n1. softmax_choice=\'PROBABILISTIC\' is documented but BROKEN in the current PNL build: EMComposition forwards the raw string to SoftMax → OneHot.mode, whose Literal only accepts {\'deterministic\',\'PROB\',\'PROB_INDICATOR\',\'arg_max\',...,\'MIN_ABS_INDICATOR\'}. Result: BeartypeCallHintParamViolation at construction. The schema therefore exposes only WEIGHTED_AVG and ARG_MAX. If the caller wants categorical sampling, omit softmax_choice and either (a) post-sample externally from the softmax output, or (b) wait for an upstream PNL fix. ARG_MAX is rewritten internally to ARG_MAX_INDICATOR.\n\n2. `fields` dict entries must be COMPLETE: either a 3-tuple/list [field_weight, learn_field_weight, target_field] or an object with ALL three lowercase keys \'field_weight\', \'learn_field_weight\', \'target_field\'. Passing only a subset (e.g. {\'field_weight\': 1.0}) raises KeyError because _parse_fields_dict indexes the constants directly. Mark value fields with field_weight=null (None), not 0 — 0 means "key field currently weighted to zero; ignored at retrieval but still a key".\n\n3. `fields` and the legacy args (field_names/field_weights/learn_field_weights/target_fields) are mutually exclusive in spirit; passing both warns and the legacy args are dropped.\n\nOTHER GOTCHAS:\n\n- field_weights default if not given and num_fields>1: all keys with weight 1 except the LAST field, which becomes a value (None). Single-field default is [1].\n- memory_template tuple form: 2-tuple = (num_fields, field_len) and needs memory_capacity; 3-tuple\'s first element MUST equal memory_capacity if both given.\n- memory_fill must avoid all-zero key fields when normalize_memories=True — the constructor warns and runtime will divide by zero.\n- learning_rate as a dict raises EMCompositionError; per-field rates go in `fields` or `learn_field_weights`.\n- enable_learning is silently neutralized (with a runtime warning at learn()) when concatenate_queries is true or num_keys==1.\n- use_gating_for_weighting=True is incompatible with enable_learning=True at learn() time (raises).\n- After construction, add_node/add_projection from outside raise — EMComposition is treated as immutable post-build; nest it as-is.\n- Returned object is a Composition; query_input_nodes / value_input_nodes / retrieved_nodes / softmax_node / storage_node are auto-named with [QUERY]/[VALUE]/[RETRIEVED] suffixes (or KEY_n_INPUT / VALUE_n_INPUT if field_names not provided).'
+TOOL_DESCRIPTION = 'Constructs a `psyneulink.EMComposition` — an `AutodiffComposition` subclass that implements a differentiable, content-addressable episodic memory whose `field_weights` can be learned. Use it when the model needs key/value memory with per-field weighted similarity matching, softmax retrieval, and (optionally) backprop-trainable weights — i.e., differentiable analogues of `EpisodicMemoryMechanism`. Beyond what `AutodiffComposition` / `Composition` already provide, this tool builds the full retrieval+storage subgraph for you (query/value input nodes, match nodes, optional concatenation, softmax retrieval, retrieved nodes, and an `EMStorageMechanism`). Returns a handle to a registered `EMComposition` that can be nested inside another `Composition` or used standalone via `run`/`learn`.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "concatenate_queries": {\n      "default": false,\n      "description": "If true, all key inputs are concatenated into a single vector before matching. Silently downgraded to false if there is only one key, if key field_weights aren\'t all equal, or if normalize_memories is false. Incompatible with learning of field_weights.",\n      "type": "boolean"\n    },\n    "enable_learning": {\n      "default": true,\n      "description": "If true, build PsyNeuLink learning pathways. Must be false when use_gating_for_weighting=true and when softmax_choice is ARG_MAX or PROBABILISTIC.",\n      "type": "boolean"\n    },\n    "field_names": {\n      "default": null,\n      "description": "Names for each field (length must equal number of fields in memory_template). Ignored if \'fields\' is supplied.",\n      "items": {\n        "type": "string"\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "field_weights": {\n      "default": null,\n      "description": "Relative weight for each field during retrieval matching. Use a positive number for keys; null entries mark the field as a value (stored/retrieved but not matched). Length must match number of fields. Ignored if \'fields\' is supplied.",\n      "items": {\n        "type": [\n          "number",\n          "null"\n        ]\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "fields": {\n      "additionalProperties": {\n        "properties": {\n          "field_weight": {\n            "type": [\n              "number",\n              "null"\n            ]\n          },\n          "learn_field_weight": {\n            "type": [\n              "boolean",\n              "number",\n              "null"\n            ]\n          },\n          "target_field": {\n            "type": "boolean"\n          }\n        },\n        "type": "object"\n      },\n      "default": null,\n      "description": "Dict keyed by field name, where each value is a dict with keys \'field_weight\' (float or null \\u2014 null marks the field as a value rather than a key), \'learn_field_weight\' (bool/float/null), and \'target_field\' (bool). One entry per field; the count must match the number of fields in memory_template. When supplied, do NOT also pass field_names / field_weights / learn_field_weights / target_fields \\u2014 those will be ignored with a warning.",\n      "type": [\n        "object",\n        "null"\n      ]\n    },\n    "learn_field_weights": {\n      "default": false,\n      "description": "Whether field_weights are learnable. Bool applies to all key fields; a list (length = num fields) gives per-field bool/learning_rate. Ignored if \'fields\' is supplied.",\n      "oneOf": [\n        {\n          "type": "boolean"\n        },\n        {\n          "items": {\n            "type": [\n              "boolean",\n              "number",\n              "null"\n            ]\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "learning_rate": {\n      "default": 0.01,\n      "description": "Default learning rate for any field_weight not given its own rate. Dict form is NOT accepted here \\u2014 use \'fields\' or \'learn_field_weights\' for per-field rates.",\n      "type": "number"\n    },\n    "memory_capacity": {\n      "default": null,\n      "description": "Number of items the memory holds. If null/omitted, defaults to 1000 (or to the leading dimension of memory_template if it is 3D).",\n      "type": [\n        "integer",\n        "null"\n      ]\n    },\n    "memory_decay_rate": {\n      "default": "AUTO",\n      "description": "Per-step decay applied to existing memories before each store. Number in [0, 1], or \'AUTO\' to set 1/memory_capacity, or 0 to disable decay.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "AUTO"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "memory_fill": {\n      "default": 0,\n      "description": "Value used to fill memory at initialization. Scalar fills all entries with that value; a 2-element array [low, high] draws uniform random fills. If memories are normalized, avoid all-zeros (a divide-by-zero warning will fire); use a small nonzero scalar or [low, high].",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "maxItems": 2,\n          "minItems": 2,\n          "type": "array"\n        }\n      ]\n    },\n    "memory_template": {\n      "default": [\n        [\n          0\n        ],\n        [\n          0\n        ]\n      ],\n      "description": "Shape/contents of a memory entry. MUST be a 2D or 3D array of arrays (one inner array per field, e.g. [[0]*5, [0]*5] for two 5-dim fields, or a 3D list-of-entries for a partially-filled memory). Do NOT pass a flat list of ints like [2, 20] \\u2014 the tuple-shape form (num_fields, field_len) is only honored for Python tuples, and a JSON array is interpreted as a list, which raises \'object of type int has no len()\'. Use [[0]*20, [0]*20] instead.",\n      "oneOf": [\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        },\n        {\n          "items": {\n            "items": {\n              "items": {\n                "type": "number"\n              },\n              "type": "array"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "default": "EM_Composition",\n      "description": "Name of the EMComposition instance.",\n      "type": "string"\n    },\n    "normalize_field_weights": {\n      "default": true,\n      "description": "If true, field_weights are normalized to sum to 1 across keys; if false, used as absolute weights.",\n      "type": "boolean"\n    },\n    "normalize_memories": {\n      "default": true,\n      "description": "If true, keys and stored memories are L2-normalized before dot product (cosine similarity). Set false to use raw dot products.",\n      "type": "boolean"\n    },\n    "purge_by_field_weights": {\n      "default": false,\n      "description": "If true, weight per-field norms by field_weights when picking the slot to overwrite.",\n      "type": "boolean"\n    },\n    "softmax_choice": {\n      "description": "How softmax output is used for retrieval: \'WEIGHTED_AVG\' (default), \'ARG_MAX\', or \'PROBABILISTIC\'. PREFER OMITTING this argument: explicitly passing \'WEIGHTED_AVG\' currently triggers a PsyNeuLink type-validation error inside SoftMax/OneHot. ARG_MAX and PROBABILISTIC only work with enable_learning=false (using them with learning will raise from the learn() method).",\n      "enum": [\n        "WEIGHTED_AVG",\n        "ARG_MAX",\n        "PROBABILISTIC"\n      ],\n      "type": "string"\n    },\n    "softmax_gain": {\n      "default": 1,\n      "description": "Inverse temperature for the retrieval softmax. Number for fixed gain, \'ADAPTIVE\' for entropy-adaptive gain, or \'CONTROL\' to add a ControlMechanism that learns gain.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "ADAPTIVE",\n            "CONTROL"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "softmax_threshold": {\n      "default": 0.001,\n      "description": "Mask threshold below which softmax inputs are zeroed. Must be > 0 if specified, or null.",\n      "type": [\n        "number",\n        "null"\n      ]\n    },\n    "storage_prob": {\n      "default": 1,\n      "description": "Probability in [0, 1] of storing the current input on each execution.",\n      "type": "number"\n    },\n    "store_on_optimization": {\n      "default": "FIRST",\n      "description": "Which optimization step(s) within a learning trial trigger storage.",\n      "enum": [\n        "FIRST",\n        "LAST",\n        "ALL"\n      ],\n      "type": "string"\n    },\n    "target_fields": {\n      "default": null,\n      "description": "Per-field bool list selecting which retrieved fields receive error signals during learning. Length must equal number of fields. Ignored if \'fields\' is supplied.",\n      "items": {\n        "type": "boolean"\n      },\n      "type": [\n        "array",\n        "null"\n      ]\n    },\n    "use_gating_for_weighting": {\n      "default": false,\n      "description": "If true, weight match_nodes via output gating instead of multiplicative input. Forces enable_learning=false.",\n      "type": "boolean"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nmemory_template gotcha (recurring failure mode in feedback): a JSON array of plain ints like [2, 20] is interpreted as a list (not a Python tuple), so PsyNeuLink does NOT treat it as a (num_fields, field_len) shape spec — it tries to read each int as a field and crashes with "object of type \'int\' has no len()". Always pass concrete arrays of arrays, e.g. [[0.0001]*20, [0.0001]*20] for two 20-dim fields. softmax_choice=\'WEIGHTED_AVG\' has been observed to raise a beartype error inside the inner OneHot function (OneHot\'s mode= literal does not include \'WEIGHTED_AVG\'); the safest call is to omit softmax_choice entirely. ARG_MAX and PROBABILISTIC are only usable when enable_learning=false. fields and the legacy field_names/field_weights/learn_field_weights/target_fields args are mutually exclusive — passing both warns and silently ignores the legacy ones. With normalize_memories=true, all-zero memory initialization triggers a divide-by-zero warning at construction; pass a nonzero memory_fill (scalar or [low, high]). learning_rate as a dict is rejected by EMComposition (unlike AutodiffComposition); use \'fields\' or \'learn_field_weights\' for per-field rates. concatenate_queries silently downgrades to false unless num_keys>1, all key field_weights are equal, and normalize_memories is true; it is also incompatible with learning. memory_decay_rate=\'AUTO\' resolves to 1/memory_capacity at construction time.'
 TOOL_PARAMETERS = { 'properties': { 'concatenate_queries': { 'default': False,
-                                           'description': 'If true, concatenate all '
-                                                          'key inputs into a single '
-                                                          'vector before matching (one '
-                                                          'match_node total). Silently '
-                                                          'downgraded to false (with '
-                                                          'warning) unless num_keys>1, '
-                                                          'all key weights are equal, '
-                                                          'AND '
-                                                          'normalize_memories=true. '
-                                                          'Incompatible with learning '
-                                                          'of field weights.',
+                                           'description': 'If true, all key inputs are '
+                                                          'concatenated into a single '
+                                                          'vector before matching. '
+                                                          'Silently downgraded to '
+                                                          'false if there is only one '
+                                                          'key, if key field_weights '
+                                                          "aren't all equal, or if "
+                                                          'normalize_memories is '
+                                                          'false. Incompatible with '
+                                                          'learning of field_weights.',
                                            'type': 'boolean'},
                   'enable_learning': { 'default': True,
-                                       'description': 'Wire backprop pathways for '
-                                                      'retrieved_nodes (subject to '
-                                                      'target_fields). Requires '
-                                                      'use_gating_for_weighting=False '
-                                                      'and '
-                                                      "softmax_choice='WEIGHTED_AVG' "
-                                                      'at learn() time, otherwise '
-                                                      'raises. Has no effect when '
-                                                      'concatenate_queries is true or '
-                                                      'there is only one key.',
+                                       'description': 'If true, build PsyNeuLink '
+                                                      'learning pathways. Must be '
+                                                      'false when '
+                                                      'use_gating_for_weighting=true '
+                                                      'and when softmax_choice is '
+                                                      'ARG_MAX or PROBABILISTIC.',
                                        'type': 'boolean'},
                   'field_names': { 'default': None,
-                                   'description': 'Names for each field, in '
-                                                  'memory_template order. Length must '
-                                                  'equal num_fields. Ignored (with '
-                                                  'warning) if `fields` is provided.',
+                                   'description': 'Names for each field (length must '
+                                                  'equal number of fields in '
+                                                  'memory_template). Ignored if '
+                                                  "'fields' is supplied.",
                                    'items': {'type': 'string'},
                                    'type': ['array', 'null']},
                   'field_weights': { 'default': None,
-                                     'description': 'Per-field weight: positive number '
-                                                    '= KEY field with that '
-                                                    'contribution to matching; null = '
-                                                    'VALUE field (stored/retrieved, '
-                                                    'not matched). Length must equal '
-                                                    'num_fields, or 1 (broadcast). '
-                                                    'Cannot be all-null. Ignored (with '
-                                                    'warning) if `fields` is provided.',
+                                     'description': 'Relative weight for each field '
+                                                    'during retrieval matching. Use a '
+                                                    'positive number for keys; null '
+                                                    'entries mark the field as a value '
+                                                    '(stored/retrieved but not '
+                                                    'matched). Length must match '
+                                                    'number of fields. Ignored if '
+                                                    "'fields' is supplied.",
                                      'items': {'type': ['number', 'null']},
                                      'type': ['array', 'null']},
-                  'fields': { 'additionalProperties': { 'oneOf': [ { 'description': '[field_weight '
-                                                                                    '(number '
-                                                                                    'or '
-                                                                                    'null '
-                                                                                    'for '
-                                                                                    'value '
-                                                                                    'field), '
-                                                                                    'learn_field_weight '
-                                                                                    '(bool|number|null), '
-                                                                                    'target_field '
-                                                                                    '(bool)]',
-                                                                     'maxItems': 3,
-                                                                     'minItems': 3,
-                                                                     'type': 'array'},
-                                                                   { 'properties': { 'field_weight': { 'description': 'null '
-                                                                                                                      'marks '
-                                                                                                                      'the '
-                                                                                                                      'field '
-                                                                                                                      'as '
-                                                                                                                      'a '
-                                                                                                                      'VALUE '
-                                                                                                                      'field '
-                                                                                                                      '(stored/retrieved '
-                                                                                                                      'but '
-                                                                                                                      'not '
-                                                                                                                      'used '
-                                                                                                                      'for '
-                                                                                                                      'matching); '
-                                                                                                                      'a '
-                                                                                                                      'positive '
-                                                                                                                      'number '
-                                                                                                                      'marks '
-                                                                                                                      'it '
-                                                                                                                      'as '
-                                                                                                                      'a '
-                                                                                                                      'KEY '
-                                                                                                                      'field '
-                                                                                                                      'with '
-                                                                                                                      'that '
-                                                                                                                      'weight.',
-                                                                                                       'type': [ 'number',
-                                                                                                                 'null']},
-                                                                                     'learn_field_weight': { 'description': 'false '
-                                                                                                                            'to '
-                                                                                                                            'disable '
-                                                                                                                            'learning '
-                                                                                                                            'for '
-                                                                                                                            'this '
-                                                                                                                            'field, '
-                                                                                                                            'true/null '
-                                                                                                                            'for '
-                                                                                                                            'default '
-                                                                                                                            'learning_rate, '
-                                                                                                                            'or '
-                                                                                                                            'a '
-                                                                                                                            'numeric '
-                                                                                                                            'per-field '
-                                                                                                                            'learning '
-                                                                                                                            'rate. '
-                                                                                                                            'Ignored '
-                                                                                                                            'for '
-                                                                                                                            'value '
-                                                                                                                            'fields.'},
-                                                                                     'target_field': { 'description': 'Whether '
-                                                                                                                      'to '
-                                                                                                                      'construct '
-                                                                                                                      'a '
-                                                                                                                      'learning '
-                                                                                                                      'pathway '
-                                                                                                                      'terminating '
-                                                                                                                      'at '
-                                                                                                                      'this '
-                                                                                                                      "field's "
-                                                                                                                      'retrieved_node.',
-                                                                                                       'type': 'boolean'}},
-                                                                     'required': [ 'field_weight',
-                                                                                   'learn_field_weight',
-                                                                                   'target_field'],
-                                                                     'type': 'object'}]},
+                  'fields': { 'additionalProperties': { 'properties': { 'field_weight': { 'type': [ 'number',
+                                                                                                    'null']},
+                                                                        'learn_field_weight': { 'type': [ 'boolean',
+                                                                                                          'number',
+                                                                                                          'null']},
+                                                                        'target_field': { 'type': 'boolean'}},
+                                                        'type': 'object'},
                               'default': None,
-                              'description': 'Per-field config keyed by field name. '
-                                             'EACH value MUST be either (a) a '
-                                             '3-element array [field_weight, '
-                                             'learn_field_weight, target_field], or '
-                                             '(b) an object containing ALL three keys '
-                                             "'field_weight', 'learn_field_weight', "
-                                             "'target_field' (lowercase). Partial "
-                                             'dicts raise KeyError. When `fields` is '
-                                             'given, do NOT also pass '
-                                             'field_names/field_weights/learn_field_weights/target_fields '
-                                             '— they are silently overridden and warn.',
+                              'description': 'Dict keyed by field name, where each '
+                                             "value is a dict with keys 'field_weight' "
+                                             '(float or null — null marks the field as '
+                                             'a value rather than a key), '
+                                             "'learn_field_weight' (bool/float/null), "
+                                             "and 'target_field' (bool). One entry per "
+                                             'field; the count must match the number '
+                                             'of fields in memory_template. When '
+                                             'supplied, do NOT also pass field_names / '
+                                             'field_weights / learn_field_weights / '
+                                             'target_fields — those will be ignored '
+                                             'with a warning.',
                               'type': ['object', 'null']},
                   'learn_field_weights': { 'default': False,
-                                           'description': 'Whether/how to learn each '
-                                                          "field's weight. bool "
-                                                          'applies to all keys; list '
-                                                          '(length num_fields) gives '
-                                                          'per-field bool or numeric '
-                                                          'learning rate. Forced False '
-                                                          'for value fields. Ignored '
-                                                          '(with warning) if `fields` '
-                                                          'is provided.',
+                                           'description': 'Whether field_weights are '
+                                                          'learnable. Bool applies to '
+                                                          'all key fields; a list '
+                                                          '(length = num fields) gives '
+                                                          'per-field '
+                                                          'bool/learning_rate. Ignored '
+                                                          "if 'fields' is supplied.",
                                            'oneOf': [ {'type': 'boolean'},
                                                       { 'items': { 'type': [ 'boolean',
                                                                              'number',
                                                                              'null']},
                                                         'type': 'array'}]},
                   'learning_rate': { 'default': 0.01,
-                                     'description': 'Default learning rate applied to '
-                                                    'any field weight whose '
-                                                    'learn_field_weights entry is '
-                                                    'True/None. Dict form is NOT '
-                                                    'supported by EMComposition '
-                                                    '(raises EMCompositionError) — use '
-                                                    '`fields` or `learn_field_weights` '
-                                                    'for per-field rates.',
-                                     'oneOf': [ {'type': 'number'},
-                                                {'type': 'boolean'}]},
+                                     'description': 'Default learning rate for any '
+                                                    'field_weight not given its own '
+                                                    'rate. Dict form is NOT accepted '
+                                                    "here — use 'fields' or "
+                                                    "'learn_field_weights' for "
+                                                    'per-field rates.',
+                                     'type': 'number'},
                   'memory_capacity': { 'default': None,
-                                       'description': 'Number of entries the memory '
-                                                      'can hold. Required if '
-                                                      'memory_template is a 2-tuple or '
-                                                      'a single-entry 2D template; '
-                                                      'otherwise defaults to 1000 or '
-                                                      'to len(memory_template) for 3D '
-                                                      'templates.',
-                                       'minimum': 1,
+                                       'description': 'Number of items the memory '
+                                                      'holds. If null/omitted, '
+                                                      'defaults to 1000 (or to the '
+                                                      'leading dimension of '
+                                                      'memory_template if it is 3D).',
                                        'type': ['integer', 'null']},
                   'memory_decay_rate': { 'default': 'AUTO',
-                                         'description': 'Multiplicative decay applied '
-                                                        'to existing memories before '
-                                                        'each new write. Numeric in '
-                                                        '[0,1] (0 = no decay), or '
-                                                        "'AUTO' which sets it to "
-                                                        '1/memory_capacity.',
-                                         'oneOf': [ { 'maximum': 1,
-                                                      'minimum': 0,
-                                                      'type': 'number'},
+                                         'description': 'Per-step decay applied to '
+                                                        'existing memories before each '
+                                                        'store. Number in [0, 1], or '
+                                                        "'AUTO' to set "
+                                                        '1/memory_capacity, or 0 to '
+                                                        'disable decay.',
+                                         'oneOf': [ {'type': 'number'},
                                                     { 'enum': ['AUTO'],
                                                       'type': 'string'}]},
                   'memory_fill': { 'default': 0,
-                                   'description': 'Value used to populate empty slots: '
-                                                  'scalar (constant fill) or a '
-                                                  '2-element [low, high] tuple '
-                                                  '(uniform random fill). Important '
-                                                  'when normalize_memories=True — a '
-                                                  'field of all zeros causes a '
-                                                  'divide-by-zero warning at '
-                                                  'construction and NaN matches at '
-                                                  'runtime.',
+                                   'description': 'Value used to fill memory at '
+                                                  'initialization. Scalar fills all '
+                                                  'entries with that value; a '
+                                                  '2-element array [low, high] draws '
+                                                  'uniform random fills. If memories '
+                                                  'are normalized, avoid all-zeros (a '
+                                                  'divide-by-zero warning will fire); '
+                                                  'use a small nonzero scalar or [low, '
+                                                  'high].',
                                    'oneOf': [ {'type': 'number'},
                                               { 'items': {'type': 'number'},
                                                 'maxItems': 2,
                                                 'minItems': 2,
                                                 'type': 'array'}]},
                   'memory_template': { 'default': [[0], [0]],
-                                       'description': 'Shape/content of an entry. (1) '
-                                                      '2-tuple (num_fields, field_len) '
-                                                      'or 3-tuple (num_entries, '
-                                                      'num_fields, field_len) of ints '
-                                                      '— shape only, contents come '
-                                                      'from memory_fill. (2) 2D '
-                                                      'list/array — a single entry '
-                                                      'template, replicated '
-                                                      'memory_capacity times. (3) 3D '
-                                                      'list/array — explicit per-entry '
-                                                      'contents (rows are entries, '
-                                                      'columns are fields). Fields may '
-                                                      'have different lengths only '
-                                                      'when given via list/array, not '
-                                                      'via tuple-of-ints.',
-                                       'oneOf': [ { 'items': {'type': 'integer'},
-                                                    'maxItems': 3,
-                                                    'minItems': 2,
-                                                    'type': 'array'},
-                                                  { 'items': { 'items': { 'type': 'number'},
+                                       'description': 'Shape/contents of a memory '
+                                                      'entry. MUST be a 2D or 3D array '
+                                                      'of arrays (one inner array per '
+                                                      'field, e.g. [[0]*5, [0]*5] for '
+                                                      'two 5-dim fields, or a 3D '
+                                                      'list-of-entries for a '
+                                                      'partially-filled memory). Do '
+                                                      'NOT pass a flat list of ints '
+                                                      'like [2, 20] — the tuple-shape '
+                                                      'form (num_fields, field_len) is '
+                                                      'only honored for Python tuples, '
+                                                      'and a JSON array is interpreted '
+                                                      "as a list, which raises 'object "
+                                                      "of type int has no len()'. Use "
+                                                      '[[0]*20, [0]*20] instead.',
+                                       'oneOf': [ { 'items': { 'items': { 'type': 'number'},
                                                                'type': 'array'},
                                                     'type': 'array'},
                                                   { 'items': { 'items': { 'items': { 'type': 'number'},
@@ -258,126 +168,90 @@ TOOL_PARAMETERS = { 'properties': { 'concatenate_queries': { 'default': False,
                             'description': 'Name of the EMComposition instance.',
                             'type': 'string'},
                   'normalize_field_weights': { 'default': True,
-                                               'description': 'If true, key '
-                                                              'field_weights are '
-                                                              'renormalized to sum to '
-                                                              '1; if false, used as '
-                                                              'absolute weights.',
+                                               'description': 'If true, field_weights '
+                                                              'are normalized to sum '
+                                                              'to 1 across keys; if '
+                                                              'false, used as absolute '
+                                                              'weights.',
                                                'type': 'boolean'},
                   'normalize_memories': { 'default': True,
-                                          'description': 'If true, queries and stored '
-                                                         'keys are L2-normalized '
-                                                         'before dot-product (cosine '
-                                                         'similarity). Required by '
-                                                         'concatenate_queries.',
+                                          'description': 'If true, keys and stored '
+                                                         'memories are L2-normalized '
+                                                         'before dot product (cosine '
+                                                         'similarity). Set false to '
+                                                         'use raw dot products.',
                                           'type': 'boolean'},
                   'purge_by_field_weights': { 'default': False,
-                                              'description': 'If true, the row chosen '
-                                                             'for replacement on '
-                                                             'storage is the weakest '
-                                                             'after multiplying field '
-                                                             'norms by field_weights '
-                                                             '(so unweighted/value '
-                                                             "fields don't influence "
-                                                             'which slot is '
-                                                             'overwritten).',
+                                              'description': 'If true, weight '
+                                                             'per-field norms by '
+                                                             'field_weights when '
+                                                             'picking the slot to '
+                                                             'overwrite.',
                                               'type': 'boolean'},
-                  'seed': { 'default': None,
-                            'description': 'Seed for the random_state used by '
-                                           'storage_prob and random memory_fill.',
-                            'type': ['integer', 'null']},
-                  'softmax_choice': { 'default': 'WEIGHTED_AVG',
-                                      'description': 'How softmax output is used for '
-                                                     'retrieval. WEIGHTED_AVG = '
-                                                     'standard softmax-weighted '
-                                                     'average over entries (the only '
-                                                     'choice compatible with '
-                                                     'learning). ARG_MAX = pick the '
-                                                     'single best-matching entry '
-                                                     '(internally rewritten to '
-                                                     'ARG_MAX_INDICATOR). NOTE: '
-                                                     "'PROBABILISTIC' appears in the "
-                                                     'docstring but is BROKEN in the '
-                                                     'current PNL build — it is '
-                                                     'forwarded raw to OneHot.mode '
-                                                     'which only accepts '
-                                                     "{'PROB','PROB_INDICATOR',...}, "
-                                                     'so it raises a Beartype error at '
-                                                     'construction. Do not use it.',
-                                      'enum': ['WEIGHTED_AVG', 'ARG_MAX'],
+                  'softmax_choice': { 'description': 'How softmax output is used for '
+                                                     "retrieval: 'WEIGHTED_AVG' "
+                                                     "(default), 'ARG_MAX', or "
+                                                     "'PROBABILISTIC'. PREFER OMITTING "
+                                                     'this argument: explicitly '
+                                                     "passing 'WEIGHTED_AVG' currently "
+                                                     'triggers a PsyNeuLink '
+                                                     'type-validation error inside '
+                                                     'SoftMax/OneHot. ARG_MAX and '
+                                                     'PROBABILISTIC only work with '
+                                                     'enable_learning=false (using '
+                                                     'them with learning will raise '
+                                                     'from the learn() method).',
+                                      'enum': [ 'WEIGHTED_AVG',
+                                                'ARG_MAX',
+                                                'PROBABILISTIC'],
                                       'type': 'string'},
                   'softmax_gain': { 'default': 1,
-                                    'description': 'Inverse-temperature for the '
-                                                   'retrieval softmax. Numeric scalar '
-                                                   "OR the keyword 'ADAPTIVE' "
-                                                   "(entropy-weighted) OR 'CONTROL' "
-                                                   '(constructs a SOFTMAX GAIN CONTROL '
-                                                   'node that adapts gain at runtime; '
-                                                   'this also forces softmax_gain to '
-                                                   'be non-modulable).',
+                                    'description': 'Inverse temperature for the '
+                                                   'retrieval softmax. Number for '
+                                                   "fixed gain, 'ADAPTIVE' for "
+                                                   'entropy-adaptive gain, or '
+                                                   "'CONTROL' to add a "
+                                                   'ControlMechanism that learns gain.',
                                     'oneOf': [ {'type': 'number'},
                                                { 'enum': ['ADAPTIVE', 'CONTROL'],
                                                  'type': 'string'}]},
                   'softmax_threshold': { 'default': 0.001,
-                                         'description': 'Mask cutoff: values below '
-                                                        'this are zeroed before '
-                                                        'softmax. Must be > 0 if not '
+                                         'description': 'Mask threshold below which '
+                                                        'softmax inputs are zeroed. '
+                                                        'Must be > 0 if specified, or '
                                                         'null.',
                                          'type': ['number', 'null']},
                   'storage_prob': { 'default': 1,
-                                    'description': 'Per-execution probability that the '
-                                                   'current input is written into '
-                                                   'memory. 0 disables storage; 1 '
-                                                   'always stores.',
-                                    'maximum': 1,
-                                    'minimum': 0,
+                                    'description': 'Probability in [0, 1] of storing '
+                                                   'the current input on each '
+                                                   'execution.',
                                     'type': 'number'},
                   'store_on_optimization': { 'default': 'FIRST',
                                              'description': 'Which optimization '
-                                                            'step(s) inside a learning '
-                                                            'trial actually store an '
-                                                            'entry.',
+                                                            'step(s) within a learning '
+                                                            'trial trigger storage.',
                                              'enum': ['FIRST', 'LAST', 'ALL'],
                                              'type': 'string'},
                   'target_fields': { 'default': None,
-                                     'description': 'Per-field bool: which retrieved '
-                                                    'fields should receive an error '
-                                                    'signal during learning. Length '
-                                                    'must equal num_fields. Ignored '
-                                                    '(with warning) if `fields` is '
-                                                    'provided.',
+                                     'description': 'Per-field bool list selecting '
+                                                    'which retrieved fields receive '
+                                                    'error signals during learning. '
+                                                    'Length must equal number of '
+                                                    "fields. Ignored if 'fields' is "
+                                                    'supplied.',
                                      'items': {'type': 'boolean'},
                                      'type': ['array', 'null']},
                   'use_gating_for_weighting': { 'default': False,
-                                                'description': 'If true, weight match '
-                                                               'outputs via output '
-                                                               'gating '
-                                                               '(GatingMechanism) '
-                                                               'instead of '
-                                                               'multiplicative '
-                                                               'ProcessingMechanisms; '
-                                                               'in that case no '
-                                                               'weighted_match_nodes '
-                                                               'are built and field '
-                                                               'weights cannot be '
-                                                               'learned (must combine '
-                                                               'with '
-                                                               'enable_learning=False).',
-                                                'type': 'boolean'},
-                  'use_storage_node': { 'default': True,
-                                        'description': 'If true (recommended/default), '
-                                                       'an EMStorageMechanism handles '
-                                                       'writes. If false, storage runs '
-                                                       'as a Composition method '
-                                                       'instead — debug only, and '
-                                                       'prevents the EMComposition '
-                                                       'from being imported into '
-                                                       'another Composition via '
-                                                       'import_composition.',
-                                        'type': 'boolean'}},
+                                                'description': 'If true, weight '
+                                                               'match_nodes via output '
+                                                               'gating instead of '
+                                                               'multiplicative input. '
+                                                               'Forces '
+                                                               'enable_learning=false.',
+                                                'type': 'boolean'}},
   'required': [],
   'type': 'object'}
-TOOL_NOTES = 'FEEDBACK-DRIVEN GOTCHAS:\n\n1. softmax_choice=\'PROBABILISTIC\' is documented but BROKEN in the current PNL build: EMComposition forwards the raw string to SoftMax → OneHot.mode, whose Literal only accepts {\'deterministic\',\'PROB\',\'PROB_INDICATOR\',\'arg_max\',...,\'MIN_ABS_INDICATOR\'}. Result: BeartypeCallHintParamViolation at construction. The schema therefore exposes only WEIGHTED_AVG and ARG_MAX. If the caller wants categorical sampling, omit softmax_choice and either (a) post-sample externally from the softmax output, or (b) wait for an upstream PNL fix. ARG_MAX is rewritten internally to ARG_MAX_INDICATOR.\n\n2. `fields` dict entries must be COMPLETE: either a 3-tuple/list [field_weight, learn_field_weight, target_field] or an object with ALL three lowercase keys \'field_weight\', \'learn_field_weight\', \'target_field\'. Passing only a subset (e.g. {\'field_weight\': 1.0}) raises KeyError because _parse_fields_dict indexes the constants directly. Mark value fields with field_weight=null (None), not 0 — 0 means "key field currently weighted to zero; ignored at retrieval but still a key".\n\n3. `fields` and the legacy args (field_names/field_weights/learn_field_weights/target_fields) are mutually exclusive in spirit; passing both warns and the legacy args are dropped.\n\nOTHER GOTCHAS:\n\n- field_weights default if not given and num_fields>1: all keys with weight 1 except the LAST field, which becomes a value (None). Single-field default is [1].\n- memory_template tuple form: 2-tuple = (num_fields, field_len) and needs memory_capacity; 3-tuple\'s first element MUST equal memory_capacity if both given.\n- memory_fill must avoid all-zero key fields when normalize_memories=True — the constructor warns and runtime will divide by zero.\n- learning_rate as a dict raises EMCompositionError; per-field rates go in `fields` or `learn_field_weights`.\n- enable_learning is silently neutralized (with a runtime warning at learn()) when concatenate_queries is true or num_keys==1.\n- use_gating_for_weighting=True is incompatible with enable_learning=True at learn() time (raises).\n- After construction, add_node/add_projection from outside raise — EMComposition is treated as immutable post-build; nest it as-is.\n- Returned object is a Composition; query_input_nodes / value_input_nodes / retrieved_nodes / softmax_node / storage_node are auto-named with [QUERY]/[VALUE]/[RETRIEVED] suffixes (or KEY_n_INPUT / VALUE_n_INPUT if field_names not provided).'
+TOOL_NOTES = 'memory_template gotcha (recurring failure mode in feedback): a JSON array of plain ints like [2, 20] is interpreted as a list (not a Python tuple), so PsyNeuLink does NOT treat it as a (num_fields, field_len) shape spec — it tries to read each int as a field and crashes with "object of type \'int\' has no len()". Always pass concrete arrays of arrays, e.g. [[0.0001]*20, [0.0001]*20] for two 20-dim fields. softmax_choice=\'WEIGHTED_AVG\' has been observed to raise a beartype error inside the inner OneHot function (OneHot\'s mode= literal does not include \'WEIGHTED_AVG\'); the safest call is to omit softmax_choice entirely. ARG_MAX and PROBABILISTIC are only usable when enable_learning=false. fields and the legacy field_names/field_weights/learn_field_weights/target_fields args are mutually exclusive — passing both warns and silently ignores the legacy ones. With normalize_memories=true, all-zero memory initialization triggers a divide-by-zero warning at construction; pass a nonzero memory_fill (scalar or [low, high]). learning_rate as a dict is rejected by EMComposition (unlike AutodiffComposition); use \'fields\' or \'learn_field_weights\' for per-field rates. concatenate_queries silently downgrades to false unless num_keys>1, all key field_weights are equal, and normalize_memories is true; it is also incompatible with learning. memory_decay_rate=\'AUTO\' resolves to 1/memory_capacity at construction time.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -402,5 +276,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_em_composition(args: dict[str, Any] | None = None) -> Any:
-        'Build a differentiable, learnable episodic memory module (subclass of `AutodiffComposition`) where retrieval is a softmax over field-weighted dot-product (or 1-L0) similarities between input keys and stored entries, and storage replaces the weakest memory row at each execution step.'
+        'Constructs a `psyneulink.EMComposition` — an `AutodiffComposition` subclass that implements a differentiable, content-addressable episodic memory whose `field_weights` can be learned.'
         return _impl(args or {})
