@@ -82,14 +82,25 @@ def gather_feedback(
 
 def consumed_issue_numbers(
     feedback_by_tool: dict[str, list[dict[str, Any]]],
+    successful_tool_names: set[str] | None = None,
 ) -> list[int]:
     """Return the GitHub issue numbers present in ``feedback_by_tool``.
 
     Used after a successful regen to know which corpus issues to mark as
     ``consumed``.
+
+    ``successful_tool_names`` (optional) limits the result to issues
+    whose tool actually got rewritten this run. Without it, we
+    historically returned every gathered issue number — which silently
+    consumed feedback for tools whose regen FAILED, since the
+    orchestrator's main() didn't filter. Pass the set of tool names
+    that successfully wrote to keep failed-tool feedback recoverable
+    on the next regen.
     """
     seen: set[int] = set()
-    for entries in feedback_by_tool.values():
+    for tool_name, entries in feedback_by_tool.items():
+        if successful_tool_names is not None and tool_name not in successful_tool_names:
+            continue
         for entry in entries:
             if entry.get("source") != "human-github":
                 continue
@@ -135,21 +146,78 @@ def archive_pending(
     pending_path: Path = PENDING_PATH,
     archive_root: Path = ARCHIVE_ROOT,
     date: str | None = None,
+    *,
+    successful_tool_names: set[str] | None = None,
 ) -> Path | None:
     """Move pending entries to ``archive_root/<date>/issues.jsonl`` and
     truncate pending. If pending is empty or missing, this is a no-op.
 
     If a file already exists for ``date``, new entries are appended.
     Returns the archive file path, or ``None`` if nothing was archived.
+
+    ``successful_tool_names`` (optional) makes archival per-tool-success
+    aware: only entries whose ``tool_name`` field is in the set get
+    archived; the rest are kept in pending so the next regen sees them
+    again. Without this filter, *all* pending entries were archived
+    after any successful regen, even when the entry's specific tool
+    failed — which silently lost feedback whenever a per-symbol regen
+    crashed (claude CLI timeout, stdin race, etc.). Pass the set of
+    tool names that successfully wrote to make failures recoverable.
     """
     if not pending_path.exists() or pending_path.stat().st_size == 0:
         return None
 
     date = date or datetime.now(timezone.utc).date().isoformat()
+
+    # Per-tool-success aware path: split entries, archive successful,
+    # rewrite pending with the rest.
+    if successful_tool_names is not None:
+        kept: list[str] = []
+        archived_lines: list[str] = []
+        with pending_path.open("r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.rstrip("\n")
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    tool_name = entry.get("tool_name", "")
+                except (json.JSONDecodeError, AttributeError):
+                    # Malformed line — preserve it in pending rather
+                    # than silently dropping. A human can clean it up.
+                    kept.append(line)
+                    continue
+                if tool_name in successful_tool_names:
+                    archived_lines.append(line)
+                else:
+                    kept.append(line)
+
+        if not archived_lines:
+            # Nothing archivable this run — leave pending untouched.
+            return None
+
+        archive_dir = archive_root / date
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_file = archive_dir / "issues.jsonl"
+        with archive_file.open("a", encoding="utf-8") as f:
+            for line in archived_lines:
+                f.write(line + "\n")
+        # Rewrite pending with the kept (failed-tool / malformed)
+        # entries — atomic via a temp + rename so a crash mid-write
+        # doesn't lose the survivors.
+        if kept:
+            pending_path.write_text(
+                "\n".join(kept) + "\n", encoding="utf-8"
+            )
+        else:
+            pending_path.write_text("", encoding="utf-8")
+        return archive_file
+
+    # Legacy path (no filter): archive everything. Kept for callers
+    # that don't yet know which tools succeeded.
     archive_dir = archive_root / date
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive_file = archive_dir / "issues.jsonl"
-
     contents = pending_path.read_text(encoding="utf-8")
     if not contents.endswith("\n") and contents:
         contents += "\n"

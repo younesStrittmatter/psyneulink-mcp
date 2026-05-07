@@ -131,17 +131,23 @@ def test_claude_cli_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert adapter.timeout_s == 30
 
 
-def test_claude_cli_generate_pipes_prompt_and_returns_spec(
+def test_claude_cli_generate_passes_prompt_as_positional_and_returns_spec(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """End-to-end shape using the wrapper format the live CLI emits when
     --json-schema is set: structured_output holds the parsed object and
-    `result` is empty."""
+    `result` is empty.
+
+    Verifies that the prompt is appended to argv (not piped via stdin).
+    The CLI's stdin-pipe path has a 3s "no stdin data received" race
+    that surfaced under sustained opus load — the positional form has
+    no such race.
+    """
     captured: dict[str, Any] = {}
 
-    def fake_run(argv, *, input, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
+    def fake_run(argv, *, stdin, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
         captured["argv"] = argv
-        captured["input"] = input
+        captured["stdin"] = stdin
         captured["timeout"] = timeout
         return subprocess.CompletedProcess(
             args=argv,
@@ -163,9 +169,11 @@ def test_claude_cli_generate_pipes_prompt_and_returns_spec(
     spec = adapter.generate("hello prompt", schema=SCHEMA)
 
     assert spec == VALID_SPEC
-    assert captured["input"] == "hello prompt"
-    assert captured["timeout"] == adapter.timeout_s
     assert captured["argv"][0] == "claude"
+    # Prompt should be the LAST argv entry, not piped via stdin.
+    assert captured["argv"][-1] == "hello prompt"
+    assert captured["stdin"] is subprocess.DEVNULL
+    assert captured["timeout"] == adapter.timeout_s
 
 
 def test_claude_cli_generate_raises_when_cli_missing(
@@ -180,7 +188,7 @@ def test_claude_cli_generate_raises_when_cli_missing(
 def test_claude_cli_generate_raises_on_nonzero_exit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(argv, *, input, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
+    def fake_run(argv, *, stdin, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
         return subprocess.CompletedProcess(
             args=argv, returncode=2, stdout="", stderr="boom"
         )
@@ -195,7 +203,7 @@ def test_claude_cli_generate_raises_on_nonzero_exit(
 def test_claude_cli_generate_raises_on_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(argv, *, input, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
+    def fake_run(argv, *, stdin, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
         raise subprocess.TimeoutExpired(cmd=argv, timeout=timeout)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -208,7 +216,7 @@ def test_claude_cli_generate_raises_on_timeout(
 def test_claude_cli_generate_raises_on_invalid_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_run(argv, *, input, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
+    def fake_run(argv, *, stdin, capture_output, text, timeout, check):  # type: ignore[no-untyped-def]
         return subprocess.CompletedProcess(
             args=argv, returncode=0, stdout="not json at all", stderr=""
         )

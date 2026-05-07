@@ -809,14 +809,32 @@ def main(argv: list[str] | None = None) -> int:
         # Dry runs intentionally never archive feedback or touch corpus.
         return 0
 
-    archived = feedback_loop.archive_pending()
+    # Per-tool-success-aware consumption: only archive JSONL entries
+    # whose tool actually got rewritten this run, and only mark corpus
+    # issues consumed when the affected tool succeeded. Without this,
+    # one successful tool would silently consume feedback for failed
+    # tools too — the next regen wouldn't see them again. The set is
+    # the tool_name (`create_*`) of every symbol whose body landed on
+    # disk.
+    successful_tool_names: set[str] = {
+        tool_name_for(s) for s in selected
+        if module_stem_for(s) in successful_stems
+    }
+
+    archived = feedback_loop.archive_pending(
+        successful_tool_names=successful_tool_names,
+    )
     if archived:
         print(
-            f"[generate_tools] archived pending feedback to {archived}",
+            f"[generate_tools] archived pending feedback to {archived} "
+            f"(failed-tool entries kept in pending for next regen)",
             file=sys.stderr,
         )
 
-    issue_numbers = feedback_loop.consumed_issue_numbers(feedback_by_tool)
+    issue_numbers = feedback_loop.consumed_issue_numbers(
+        feedback_by_tool,
+        successful_tool_names=successful_tool_names,
+    )
     if issue_numbers:
         sha = _git_head_sha()
         try:

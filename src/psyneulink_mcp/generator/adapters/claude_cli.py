@@ -34,10 +34,12 @@ ENV_CLAUDE_TIMEOUT_S = "PSYNEULINK_MCP_CLAUDE_TIMEOUT_S"
 
 DEFAULT_CMD = "claude"
 DEFAULT_MODEL = "sonnet"
-# 300s comfortably accommodates the largest PNL source files
-# (psyneulink.Composition is ~10k LOC and reliably needs >2 min on Sonnet).
-# Override per-run via $PSYNEULINK_MCP_CLAUDE_TIMEOUT_S.
-DEFAULT_TIMEOUT_S = 300
+# 600s comfortably accommodates the largest PNL source files on
+# *opus* (psyneulink.EMComposition reliably blows past 5min when
+# escalated to opus + given the new framework-issue + canonical-
+# example sections in the prompt). Sonnet rarely needs more than
+# 90s. Override per-run via $PSYNEULINK_MCP_CLAUDE_TIMEOUT_S.
+DEFAULT_TIMEOUT_S = 600
 
 
 class ClaudeCLIAdapter:
@@ -108,10 +110,22 @@ class ClaudeCLIAdapter:
             )
 
         argv = self.build_argv(schema, model=model)
+        # Pass the prompt as the trailing positional arg instead of
+        # piping via stdin. The CLI accepts both forms, but stdin
+        # piping has a 3s "no stdin data received" race when several
+        # claude subprocesses spawn under sustained opus load — the
+        # CLI starts its 3s read timer the moment it sees stdin
+        # attached, and `subprocess.run(input=...)` doesn't always
+        # flush before the child reads. The positional form has no
+        # such timer; we just hand the bytes to argv and let the OS
+        # deliver them. Closes the "Warning: no stdin data received in
+        # 3s, proceeding without it" failures observed during the
+        # 2026-05-07 regen of ProcessingMechanism.
+        argv = argv + [prompt]
         try:
             result = subprocess.run(
                 argv,
-                input=prompt,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_s,
