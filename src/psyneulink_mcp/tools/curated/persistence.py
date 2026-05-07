@@ -65,11 +65,20 @@ _JOURNAL_MARKER_END = "# psyneulink-mcp:end-journal"
 # under the ``if __name__ == "__main__":`` block.
 _RENDERABLE_COMPOSITION_METHODS = {
     "add_node",
+    "add_nodes",
     "add_projection",
+    "add_projections",
     "add_linear_processing_pathway",
+    "add_pathway",
+    "add_pathways",
 }
 
 _DEFAULT_EXPORT_DIR = Path("~/Documents/psyneulink-models").expanduser()
+
+# Trailing collision-counter PNL appends to inner-node names when
+# more than one instance shares the same field names. See
+# `_render_composition_introspection` for why the renderer strips it.
+_STABLE_NODE_NAME_RE = re.compile(r"-\d+$")
 
 _SNAKE1 = re.compile(r"(.)([A-Z][a-z]+)")
 _SNAKE2 = re.compile(r"([a-z0-9])([A-Z])")
@@ -360,7 +369,17 @@ def _render_composition_introspection(
         if not isinstance(node_name, str):
             return None
         comp_var = var_map[comp_handle]
-        return f"{var} = {comp_var}.nodes[{node_name!r}]"
+        # Strip PNL's collision-counter suffix (`-N` where N is digits).
+        # When the agent's session built more than one composition with
+        # the same field names (e.g. two EMCompositions side by side)
+        # PNL appends `-1`, `-2`, ... to the second instance's inner
+        # node names. Those suffixed names get captured in the journal
+        # — but on a fresh `python this-file.py` run there's no
+        # collision and the inner nodes get the un-suffixed base
+        # names. Strip the suffix so the regenerated script's lookup
+        # matches the names PNL will actually produce.
+        stable = _STABLE_NODE_NAME_RE.sub("", node_name)
+        return f"{var} = {comp_var}.nodes[{stable!r}]"
     if name in ("get_input_port", "get_output_port"):
         node_handle = args.get("node")
         port = args.get("port")
