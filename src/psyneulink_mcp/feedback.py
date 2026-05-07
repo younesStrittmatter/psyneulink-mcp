@@ -100,13 +100,45 @@ def log_runtime_error(
             "args": args,
             "exception_type": type(exc).__name__,
             "exception_message": str(exc),
-            "traceback": "".join(
-                _tb.format_exception(type(exc), exc, exc.__traceback__)
-            ),
+            "traceback": _format_clean_traceback(exc),
         },
     }
     _write_entry(entry)
     _publish_runtime_error(entry)
+
+
+def _format_clean_traceback(exc: BaseException) -> str:
+    """Format ``exc``'s traceback, stripping capability-probe noise.
+
+    PsyNeuLink uses the ``try/except TypeError`` pattern for subclass
+    capability detection (e.g.
+    ``Component._instantiate_defaults`` tries
+    ``self._validate_params(variable=variable, ...)`` and falls back to
+    ``self._validate_params(request_set=...)`` when the subclass's
+    ``_validate_params`` doesn't accept ``variable=``). Python's default
+    chained-exception display surfaces both the inner TypeError and the
+    real exception with a "During handling of the above exception"
+    banner, which makes the trace look like the TypeError IS the bug.
+    It isn't — it's intentional control flow.
+
+    When we detect that pattern (the most-recent ``__context__`` is a
+    ``TypeError`` complaining about an unexpected keyword argument AND
+    no explicit ``__cause__`` was set), we set
+    ``__suppress_context__`` so Python omits the "During handling"
+    section. Explicit ``raise X from Y`` chains are preserved.
+    """
+    ctx = exc.__context__
+    if (
+        isinstance(ctx, TypeError)
+        and exc.__cause__ is None
+        and "got an unexpected keyword argument" in str(ctx)
+    ):
+        # Mute only the implicit __context__; this is the same flag
+        # `raise X from None` sets internally. Safe to mutate the
+        # exception — `captured_tool` re-raises after logging, and we
+        # *want* the cleaner traceback to surface to the agent too.
+        exc.__suppress_context__ = True
+    return "".join(_tb.format_exception(type(exc), exc, exc.__traceback__))
 
 
 def _publish_runtime_error(entry: dict[str, Any]) -> None:

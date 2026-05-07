@@ -38,13 +38,18 @@ from pathlib import Path
 from typing import Any
 
 from psyneulink_mcp import corpus
-from psyneulink_mcp.generator import feedback_loop
+from psyneulink_mcp.generator import feedback_loop, framework_issue_loop
 from psyneulink_mcp.generator.adapters import (
     AdapterError,
     LLMAdapter,
     get_adapter,
 )
 from psyneulink_mcp.generator.adapters.base import ToolSpec
+from psyneulink_mcp.generator.framework_issue_loop import FrameworkIssue
+from psyneulink_mcp.generator.framework_issue_verifier import (
+    Status as _FwStatus,
+)
+from psyneulink_mcp.generator.framework_issue_verifier import verify as verify_framework_issue
 from psyneulink_mcp.generator.introspection import (
     SymbolMeta,
     discover_seed_symbols,
@@ -377,6 +382,7 @@ def _pick_model_for_symbol(
     symbol: SymbolMeta,
     feedback: list[dict[str, Any]],
     historical_failures: list[dict[str, Any]],
+    framework_limitations: list[FrameworkIssue] | None = None,
 ) -> str | None:
     """Return an override model for ``symbol``, or ``None`` for the default.
 
@@ -388,6 +394,9 @@ def _pick_model_for_symbol(
     * Closed historical failures exist — the regen LLM has to write a
       description that doesn't re-trigger the same closed bugs, which
       benefits from longer reasoning.
+    * Verified framework limitations exist — describing an upstream
+      bug + its workaround clearly without recommending a different
+      tool by name takes more careful prose than a default-case rewrite.
     * The symbol is a class with 4+ PNL parents — deep MRO chains
       mean more inheritance to compress correctly.
 
@@ -397,9 +406,117 @@ def _pick_model_for_symbol(
         return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
     if historical_failures:
         return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
+    if framework_limitations:
+        return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
     if symbol.kind == "class" and len(symbol.parent_short_names) >= 4:
         return os.environ.get(ENV_ESCALATED_MODEL, DEFAULT_ESCALATED_MODEL)
     return None
+
+
+def _verify_and_consume_framework_issues(
+    adapter: LLMAdapter | None,
+) -> tuple[dict[str, list[FrameworkIssue]], list[int]]:
+    """Verify every open framework_issue, partition into still-present + fixed.
+
+    Returns ``(grouped_still_present, fixed_issue_numbers)``:
+
+    * ``grouped_still_present`` keys on ``related_mcp_tool`` so the
+      per-symbol regen prompt can attach them to the right tool.
+      Issues with no ``related_mcp_tool`` are dropped from the
+      returned dict (we have no tool description to inject the warning
+      into) but are still counted in the verifier output.
+    * ``fixed_issue_numbers`` are the GH issue numbers the caller
+      should hand to ``corpus.mark_issues_consumed``.
+
+    The reproducer pass runs first (no LLM cost). LLM-judged
+    verification only runs for issues whose reproducer was
+    inconclusive AND we have an adapter to ask. ``UNKNOWN`` verdicts
+    are conservatively treated as still-present (kept in the prompt,
+    not auto-consumed) so we never drop a real bug from the warning
+    set on a flaky verifier reply.
+    """
+    try:
+        issues = framework_issue_loop.gather_framework_issues()
+    except Exception as exc:  # noqa: BLE001 — never abort regen for a verifier hiccup
+        print(
+            f"[generate_tools] could not gather framework_issue issues: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return {}, []
+
+    if not issues:
+        return {}, []
+
+    print(
+        f"[generate_tools] verifying {len(issues)} open framework_issue(s) "
+        f"on {corpus.corpus_repo()}",
+        file=sys.stderr,
+    )
+
+    llm_judge_callable = _build_llm_judge(adapter)
+    still_present: dict[str, list[FrameworkIssue]] = {}
+    fixed_numbers: list[int] = []
+    for issue in issues:
+        verdict = verify_framework_issue(issue, llm_judge=llm_judge_callable)
+        print(
+            f"  #{issue.number} ({issue.library}) → {verdict.status.value} "
+            f"[{verdict.method}] {verdict.note[:160]}",
+            file=sys.stderr,
+        )
+        if verdict.status is _FwStatus.FIXED:
+            fixed_numbers.append(issue.number)
+            continue
+        # Conservatively treat UNKNOWN as still-present: keep the
+        # warning in the prompt, don't auto-mark consumed.
+        if issue.related_mcp_tool:
+            still_present.setdefault(issue.related_mcp_tool, []).append(issue)
+    return still_present, fixed_numbers
+
+
+def _build_llm_judge(adapter: LLMAdapter | None) -> Any:
+    """Wrap the regen adapter as a (prompt -> str) callable for the verifier.
+
+    Returns ``None`` when no adapter is available (dry-run path) — the
+    verifier then reports ``UNKNOWN`` for any issue the reproducer
+    can't decide.
+
+    The judge wrapper uses a 1-property "verdict" schema instead of
+    the full ``ToolSpec`` schema so we get a structured one-line
+    response without paying the price of a full description regen.
+    """
+    if adapter is None:
+        return None
+
+    judge_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "verdict": {
+                "type": "string",
+                "description": (
+                    "Two short lines. Line 1 is exactly one of "
+                    "STILL_PRESENT / FIXED / UNKNOWN. Line 2 is a "
+                    "one-sentence justification."
+                ),
+            }
+        },
+        "required": ["verdict"],
+        "additionalProperties": False,
+    }
+
+    def _judge(prompt: str) -> str:
+        try:
+            spec = adapter.generate(prompt, schema=judge_schema)
+        except Exception as exc:  # noqa: BLE001 — propagate as empty + log
+            print(
+                f"[generate_tools] llm_judge generate() raised: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+            return ""
+        return str(spec.get("verdict", ""))  # type: ignore[union-attr]
+
+    return _judge
 
 
 def _generate_one(
@@ -409,12 +526,25 @@ def _generate_one(
     adapter: LLMAdapter | None,
     *,
     dry_run: bool,
+    framework_limitations: list[FrameworkIssue] | None = None,
 ) -> str:
+    """Render one symbol's tool module, optionally with verified framework limitations.
+
+    ``framework_limitations`` are corpus framework_issue entries that
+    the verifier confirmed still reproduce in the current PNL build.
+    They flow into the regen prompt's ``KNOWN FRAMEWORK LIMITATIONS``
+    section so the LLM writes ``notes`` warning the agent off the
+    broken call shapes.
+    """
     if dry_run or adapter is None:
         spec = _placeholder_spec(symbol)
     else:
-        prompt = render_prompt(symbol, feedback)
-        model_override = _pick_model_for_symbol(symbol, feedback, historical_failures)
+        prompt = render_prompt(
+            symbol, feedback, framework_limitations=framework_limitations
+        )
+        model_override = _pick_model_for_symbol(
+            symbol, feedback, historical_failures, framework_limitations
+        )
         spec = adapter.generate(
             prompt, schema=TOOL_SPEC_SCHEMA, model=model_override
         )
@@ -558,6 +688,41 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
+    # Verify open `framework_issue` corpus issues. Fixed ones get
+    # auto-marked `consumed`; still-present ones get attached to the
+    # affected MCP tool's regen prompt as a "KNOWN FRAMEWORK
+    # LIMITATIONS" section. Skipped entirely on dry-run (no LLM judge,
+    # no consumption). See `framework_issue_loop` + `framework_issue_verifier`.
+    framework_limitations_by_tool: dict[str, list[FrameworkIssue]] = {}
+    if not args.dry_run:
+        framework_limitations_by_tool, fixed_issue_numbers = (
+            _verify_and_consume_framework_issues(adapter)
+        )
+        if fixed_issue_numbers:
+            sha = _git_head_sha()
+            try:
+                marked = corpus.mark_issues_consumed(
+                    fixed_issue_numbers, regen_sha=sha
+                )
+                print(
+                    f"[generate_tools] marked {len(marked)}/{len(fixed_issue_numbers)} "
+                    f"framework_issue(s) consumed (verified fixed in regen {sha})",
+                    file=sys.stderr,
+                )
+            except corpus.CorpusUnavailable as e:
+                print(
+                    f"[generate_tools] could not mark framework issues consumed: {e}",
+                    file=sys.stderr,
+                )
+        if framework_limitations_by_tool:
+            print(
+                f"[generate_tools] {sum(len(v) for v in framework_limitations_by_tool.values())} "
+                f"verified-still-present framework limitation(s) across "
+                f"{len(framework_limitations_by_tool)} tool(s); "
+                f"will inject as KNOWN FRAMEWORK LIMITATIONS in the regen prompts",
+                file=sys.stderr,
+            )
+
     successful_stems: list[str] = []
     skipped_stems: list[str] = []
     failures: list[tuple[str, str]] = []
@@ -575,6 +740,9 @@ def main(argv: list[str] | None = None) -> int:
         ):
             skipped_stems.append(module_stem_for(symbol))
             continue
+        tool_framework_limitations = framework_limitations_by_tool.get(
+            tool_name, []
+        )
         try:
             body = _generate_one(
                 symbol,
@@ -582,6 +750,7 @@ def main(argv: list[str] | None = None) -> int:
                 tool_history,
                 adapter,
                 dry_run=args.dry_run,
+                framework_limitations=tool_framework_limitations,
             )
         except Exception as e:  # noqa: BLE001 — keep going past per-symbol bugs
             failures.append((symbol.qualname, repr(e)))

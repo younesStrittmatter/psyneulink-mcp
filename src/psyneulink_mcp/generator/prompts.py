@@ -59,6 +59,7 @@ Module:  {module}
 
 --- RECENT FEEDBACK ---
 {feedback}
+{framework_limitations_section}
 
 Return a ToolSpec with these fields:
 
@@ -198,11 +199,21 @@ def _render_parents_section(symbol: SymbolMeta) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str:
+def render_prompt(
+    symbol: SymbolMeta,
+    feedback: list[dict] | None = None,
+    framework_limitations: list[Any] | None = None,
+) -> str:
     """Render the user-prompt for one symbol.
 
     ``feedback`` is the merged list of local + corpus envelopes for
     this tool name (already grouped by ``orchestrator.gather_feedback``).
+
+    ``framework_limitations`` is the verified-still-present list of
+    upstream library bugs affecting this tool, from
+    ``framework_issue_verifier.verify``. The LLM is told to mention
+    each one in ``notes`` (with the workaround if available) so the
+    agent stops hitting the same broken call shape.
     """
     feedback_text = (
         "(none)"
@@ -220,6 +231,9 @@ def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str
     parents_section = _render_parents_section(symbol)
     compression_clause = _COMPRESSION_CLAUSE if parents_section else ""
     examples_section = _render_examples_section(symbol)
+    framework_limitations_section = _render_framework_limitations_section(
+        framework_limitations or []
+    )
     return PROMPT_TEMPLATE.format(
         qualname=symbol.qualname,
         short_name=symbol.short_name,
@@ -232,7 +246,48 @@ def render_prompt(symbol: SymbolMeta, feedback: list[dict] | None = None) -> str
         parents_section=parents_section,
         compression_clause=compression_clause,
         examples_section=examples_section,
+        framework_limitations_section=framework_limitations_section,
     )
+
+
+def _render_framework_limitations_section(limitations: list[Any]) -> str:
+    """Render the optional ``--- KNOWN FRAMEWORK LIMITATIONS ---`` block.
+
+    Each entry is a ``framework_issue_loop.FrameworkIssue`` whose
+    ``status`` was verified as ``STILL_PRESENT``. Empty list → empty
+    string. We include corpus issue numbers so the LLM can mention
+    them as the source of truth (e.g. "see corpus #42").
+
+    The block also tells the LLM to (a) add a warning + workaround in
+    ``notes`` for each entry, (b) NOT recommend an alternative MCP
+    tool by name (cross-pollution rule), and (c) keep the language
+    actionable — what specifically not to do, not abstract framework
+    commentary.
+    """
+    if not limitations:
+        return ""
+    lines = ["", "--- KNOWN FRAMEWORK LIMITATIONS ---"]
+    lines.append(
+        "These upstream library bugs were verified as still present in "
+        "the current build. Document each one in `notes` so the agent "
+        "stops hitting them. Include the workaround when one is given. "
+        "Do NOT recommend a different MCP tool by name — describe what "
+        "doesn't work and let the agent decide what to use instead."
+    )
+    for issue in limitations:
+        lines.append("")
+        lines.append(f"### corpus #{issue.number} — {issue.library}")
+        lines.append(f"**Title:** {issue.title}")
+        if issue.exception_type and issue.exception_message:
+            lines.append(
+                f"**Symptom:** `{issue.exception_type}: {issue.exception_message[:200]}`"
+            )
+        lines.append("**Description:**")
+        lines.append(issue.description[:1500])
+        if issue.workaround_used:
+            lines.append("**Workaround observed:**")
+            lines.append(issue.workaround_used[:600])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _render_examples_section(symbol: SymbolMeta) -> str:
