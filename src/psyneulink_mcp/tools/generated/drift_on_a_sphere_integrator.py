@@ -11,7 +11,7 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'e1fac85c4630b6ae2852fa07700431b619a6aa55eac9a133a8a8e5bbb8ff8e95'
-__pnl_qualname__ = 'psyneulink.DriftOnASphereIntegrator'
+__pnl_qualname__ = 'psyneulink.core.components.functions.stateful.integratorfunctions.DriftOnASphereIntegrator'
 __pnl_kind__ = 'class'
 __pnl_parents__ = ['IntegratorFunction',
  'StatefulFunction',
@@ -30,89 +30,79 @@ __pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebeb
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_drift_on_a_sphere_integrator'
-TOOL_DESCRIPTION = 'Create a PsyNeuLink DriftOnASphereIntegrator function: a stateful integrator whose state is a unit vector evolving on the sphere S^(dimension-1), with drift and isotropic/anisotropic noise applied in the tangent space and mapped back to the sphere via the exponential map. Beyond IntegratorFunction, this adds three input interpretations (scalar drift along a parallel-transported direction, tangent-space displacement of length dimension-1, or target point of length dimension) selected via input_space, plus the dimension parameter and Cartesian-or-hyperspherical initializer. Returns a function handle suitable for assigning to a Mechanism (e.g. as the function of a ProcessingMechanism producing a temporal-context vector).\n\nParameters (JSON Schema):\n{\n  "additionalProperties": false,\n  "properties": {\n    "default_variable": {\n      "description": "Template shape for the drift input. MUST be length dimension-1 (tangent template) or length dimension (target template, requires input_space=\'target\'). A length-1 array is NOT accepted here even though scalar drift is supported at call time; omit this field for scalar drift mode.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "dimension": {\n      "default": 3,\n      "description": "Ambient dimension d of the embedding R^d; the state lives on S^(d-1). Must be >= 2.",\n      "minimum": 2,\n      "type": "integer"\n    },\n    "initializer": {\n      "description": "Starting point on the sphere. MUST be length dimension (Cartesian, will be normalized to unit length) OR length dimension-1 (hyperspherical angles in radians). Must NOT be the zero vector. If omitted, defaults to e_0 = [1, 0, ..., 0].",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_space": {\n      "default": "auto",\n      "description": "How a vector input to the function is interpreted at runtime. \'tangent\' = length dimension-1 tangent displacement; \'target\' = length dimension point on the sphere (geodesic step toward it); \'auto\' picks by length and warns once when length-d is treated as a target. Scalar inputs always mean drift along the persistent drift_dir regardless of this setting.",\n      "enum": [\n        "auto",\n        "tangent",\n        "target"\n      ],\n      "type": "string"\n    },\n    "name": {\n      "description": "Optional name for this function instance.",\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Diffusion coefficient. Scalar = isotropic noise on the sphere. Array MUST have length dimension-1 (anisotropic noise in tangent coords); other array lengths raise FunctionError.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "offset": {\n      "default": 0,\n      "description": "Additive drift term, projected into the tangent space at each step.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "rate": {\n      "default": 1,\n      "description": "Multiplies the drift input. Scales angular velocity (scalar mode), tangent step size (tangent mode), or fraction of geodesic distance per step (target mode; 1.0 reaches target in one step).",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "seed": {\n      "description": "Seed for the internal RNG used by the diffusion term.",\n      "type": "integer"\n    },\n    "time_step_size": {\n      "default": 1,\n      "description": "Integration step dt. Drift scales as dt and noise as sqrt(dt).",\n      "exclusiveMinimum": 0,\n      "type": "number"\n    }\n  },\n  "required": [\n    "dimension"\n  ],\n  "type": "object"\n}\n\nNotes:\nDimensional gotchas — most reported failures come from getting these wrong:\n\n- `initializer` length is `dimension` (Cartesian, gets normalized) OR `dimension - 1` (hyperspherical angles). NOT length 1, NOT a scalar, NOT the zero vector. Examples for dimension=25: 25 nonzero floats (e.g. small random values), or 24 angles. To pick a safe Cartesian default, use a unit basis vector like [1.0, 0.0, ..., 0.0] of length `dimension`.\n- `default_variable` must be length `dimension - 1` (tangent template) or `dimension` (target template, with input_space=\'target\'). A length-1 array is rejected even though the runtime function accepts scalar drift; just omit `default_variable` to use scalar drift mode.\n- `noise` as an array must be exactly length `dimension - 1`; any other length raises FunctionError.\n\nBehavioral notes:\n\n- The state stored in `previous_value` is always a unit vector; the function output is the new unit vector after one integration step.\n- Scalar drift uses a persistent `drift_dir` (a random tangent unit vector, parallel-transported each step). It is not user-settable through this tool; if you need a specific direction, supply a tangent-space `default_variable` of length dimension-1 instead.\n- In target mode with rate=1.0 and time_step_size=1.0 the system reaches the target in one step; 0<rate<1 moves only partway along the geodesic.\n- `dimension` is read-only after construction.'
-TOOL_PARAMETERS = { 'additionalProperties': False,
-  'properties': { 'default_variable': { 'description': 'Template shape for the drift '
-                                                       'input. MUST be length '
-                                                       'dimension-1 (tangent template) '
-                                                       'or length dimension (target '
-                                                       'template, requires '
-                                                       "input_space='target'). A "
-                                                       'length-1 array is NOT accepted '
-                                                       'here even though scalar drift '
-                                                       'is supported at call time; '
-                                                       'omit this field for scalar '
-                                                       'drift mode.',
+TOOL_DESCRIPTION = 'Create a DriftOnASphereIntegrator function: an IntegratorFunction whose state is constrained to the unit sphere S^(dimension-1), updated via tangent-space drift+noise composed with the exponential map. Use this when you need geometric Brownian motion on a sphere (e.g., temporal context vectors in EGO/EM models) — distinct from flat-space integrators like DriftDiffusionIntegrator because previous_value is always a unit vector and rate/noise act as angular quantities. Returns a function handle to attach to a Mechanism (typically a ProcessingMechanism serving as a context generator).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template for the drift input. Length MUST be exactly dimension-1 (tangent-space template) OR exactly dimension (target-mode template). A scalar/length-1 array is NOT accepted when dimension>2 \\u2014 pass an array of zeros of the right length, or omit entirely (the constructor will pick the right shape based on input_space).",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "dimension": {\n      "default": 3,\n      "description": "Ambient dimension d of R^d. The sphere is S^(d-1). Most other shape rules are derived from this.",\n      "minimum": 2,\n      "type": "integer"\n    },\n    "initializer": {\n      "description": "Starting point on the sphere. MUST be 1D with length == dimension (Cartesian, will be normalized to unit length) OR length == dimension-1 (interpreted as hyperspherical angle coords). MUST NOT be the zero vector \\u2014 use e.g. [1, 0, 0, ...] or random nonzero values, never all zeros. If omitted, defaults to e_0 = [1, 0, ..., 0].",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_space": {\n      "default": "auto",\n      "description": "How runtime variable is interpreted: \'tangent\' (length d-1 displacement), \'target\' (length d point on sphere, geodesic step toward it), or \'auto\' (infer from variable length; emits a warning when length-d input is treated as target).",\n      "enum": [\n        "auto",\n        "tangent",\n        "target"\n      ],\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Scalar = isotropic diffusion. Array MUST have length dimension-1 (anisotropic tangent-coord diffusion).",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "offset": {\n      "default": 0,\n      "description": "Additive drift term, projected into tangent space. Keep this as a SCALAR \\u2014 passing an array triggers PNL\'s len>1 parameter-shape check against default_variable and almost always raises FunctionError.",\n      "type": "number"\n    },\n    "rate": {\n      "default": 1,\n      "description": "Scales angular movement per unit time. In target-mode with rate=1.0 and time_step_size=1.0 the system reaches the target in one step.",\n      "type": "number"\n    },\n    "seed": {\n      "description": "Seeds the internal RNG.",\n      "type": "integer"\n    },\n    "time_step_size": {\n      "default": 1,\n      "description": "Integration time step dt.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "dimension"\n  ],\n  "type": "object"\n}\n\nNotes:\nShape rules (the source of nearly every error in feedback for this tool):\n- `initializer` length must be EXACTLY `dimension` (Cartesian) or `dimension-1` (hyperspherical). Passing length-1 with dimension=25 fails with "must be a list or 1d array of length 25".\n- `initializer` must NOT be the all-zeros vector — it gets normalized and zero-norm raises FunctionError. Use e.g. [1, 0, 0, ...] (the implicit default) or any nonzero pattern.\n- `default_variable` must be length `dimension-1` (tangent template) or `dimension` (target template). A scalar [0] with dimension=25 fails with "must be length 24 (tangent template) or 25 (target template). Got 1." If unsure, omit `default_variable` entirely.\n- `offset` should be a scalar. Array offsets pass through PNL\'s StatefulFunction len>1 shape check that requires equality with default_variable\'s length, which mismatches in target mode and raises "parameters with len>1 ... don\'t have the same length as its \'default_variable\'".\n- `noise` array must be length `dimension-1`, not `dimension`.\n- previous_value is always renormalized to a unit vector after each step, so passing an unnormalized initializer is fine — but a zero vector still errors.\n- For geometric Brownian motion at sub-step accuracy, prefer small `time_step_size`; rate and noise are angular (radians) not linear units.\n- `dimension` is read-only after construction; recreate the function to change it.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template for the drift input. '
+                                                       'Length MUST be exactly '
+                                                       'dimension-1 (tangent-space '
+                                                       'template) OR exactly dimension '
+                                                       '(target-mode template). A '
+                                                       'scalar/length-1 array is NOT '
+                                                       'accepted when dimension>2 — '
+                                                       'pass an array of zeros of the '
+                                                       'right length, or omit entirely '
+                                                       '(the constructor will pick the '
+                                                       'right shape based on '
+                                                       'input_space).',
                                         'items': {'type': 'number'},
                                         'type': 'array'},
                   'dimension': { 'default': 3,
-                                 'description': 'Ambient dimension d of the embedding '
-                                                'R^d; the state lives on S^(d-1). Must '
-                                                'be >= 2.',
+                                 'description': 'Ambient dimension d of R^d. The '
+                                                'sphere is S^(d-1). Most other shape '
+                                                'rules are derived from this.',
                                  'minimum': 2,
                                  'type': 'integer'},
                   'initializer': { 'description': 'Starting point on the sphere. MUST '
-                                                  'be length dimension (Cartesian, '
-                                                  'will be normalized to unit length) '
-                                                  'OR length dimension-1 '
-                                                  '(hyperspherical angles in radians). '
-                                                  'Must NOT be the zero vector. If '
+                                                  'be 1D with length == dimension '
+                                                  '(Cartesian, will be normalized to '
+                                                  'unit length) OR length == '
+                                                  'dimension-1 (interpreted as '
+                                                  'hyperspherical angle coords). MUST '
+                                                  'NOT be the zero vector — use e.g. '
+                                                  '[1, 0, 0, ...] or random nonzero '
+                                                  'values, never all zeros. If '
                                                   'omitted, defaults to e_0 = [1, 0, '
                                                   '..., 0].',
                                    'items': {'type': 'number'},
                                    'type': 'array'},
                   'input_space': { 'default': 'auto',
-                                   'description': 'How a vector input to the function '
-                                                  'is interpreted at runtime. '
-                                                  "'tangent' = length dimension-1 "
-                                                  "tangent displacement; 'target' = "
-                                                  'length dimension point on the '
-                                                  'sphere (geodesic step toward it); '
-                                                  "'auto' picks by length and warns "
-                                                  'once when length-d is treated as a '
-                                                  'target. Scalar inputs always mean '
-                                                  'drift along the persistent '
-                                                  'drift_dir regardless of this '
-                                                  'setting.',
+                                   'description': 'How runtime variable is '
+                                                  "interpreted: 'tangent' (length d-1 "
+                                                  "displacement), 'target' (length d "
+                                                  'point on sphere, geodesic step '
+                                                  "toward it), or 'auto' (infer from "
+                                                  'variable length; emits a warning '
+                                                  'when length-d input is treated as '
+                                                  'target).',
                                    'enum': ['auto', 'tangent', 'target'],
                                    'type': 'string'},
-                  'name': { 'description': 'Optional name for this function instance.',
-                            'type': 'string'},
                   'noise': { 'default': 0,
-                             'description': 'Diffusion coefficient. Scalar = isotropic '
-                                            'noise on the sphere. Array MUST have '
-                                            'length dimension-1 (anisotropic noise in '
-                                            'tangent coords); other array lengths '
-                                            'raise FunctionError.',
+                             'description': 'Scalar = isotropic diffusion. Array MUST '
+                                            'have length dimension-1 (anisotropic '
+                                            'tangent-coord diffusion).',
                              'oneOf': [ {'type': 'number'},
                                         { 'items': {'type': 'number'},
                                           'type': 'array'}]},
                   'offset': { 'default': 0,
-                              'description': 'Additive drift term, projected into the '
-                                             'tangent space at each step.',
-                              'oneOf': [ {'type': 'number'},
-                                         { 'items': {'type': 'number'},
-                                           'type': 'array'}]},
+                              'description': 'Additive drift term, projected into '
+                                             'tangent space. Keep this as a SCALAR — '
+                                             "passing an array triggers PNL's len>1 "
+                                             'parameter-shape check against '
+                                             'default_variable and almost always '
+                                             'raises FunctionError.',
+                              'type': 'number'},
                   'rate': { 'default': 1,
-                            'description': 'Multiplies the drift input. Scales angular '
-                                           'velocity (scalar mode), tangent step size '
-                                           '(tangent mode), or fraction of geodesic '
-                                           'distance per step (target mode; 1.0 '
-                                           'reaches target in one step).',
-                            'oneOf': [ {'type': 'number'},
-                                       {'items': {'type': 'number'}, 'type': 'array'}]},
-                  'seed': { 'description': 'Seed for the internal RNG used by the '
-                                           'diffusion term.',
-                            'type': 'integer'},
+                            'description': 'Scales angular movement per unit time. In '
+                                           'target-mode with rate=1.0 and '
+                                           'time_step_size=1.0 the system reaches the '
+                                           'target in one step.',
+                            'type': 'number'},
+                  'seed': {'description': 'Seeds the internal RNG.', 'type': 'integer'},
                   'time_step_size': { 'default': 1,
-                                      'description': 'Integration step dt. Drift '
-                                                     'scales as dt and noise as '
-                                                     'sqrt(dt).',
-                                      'exclusiveMinimum': 0,
+                                      'description': 'Integration time step dt.',
                                       'type': 'number'}},
   'required': ['dimension'],
   'type': 'object'}
-TOOL_NOTES = "Dimensional gotchas — most reported failures come from getting these wrong:\n\n- `initializer` length is `dimension` (Cartesian, gets normalized) OR `dimension - 1` (hyperspherical angles). NOT length 1, NOT a scalar, NOT the zero vector. Examples for dimension=25: 25 nonzero floats (e.g. small random values), or 24 angles. To pick a safe Cartesian default, use a unit basis vector like [1.0, 0.0, ..., 0.0] of length `dimension`.\n- `default_variable` must be length `dimension - 1` (tangent template) or `dimension` (target template, with input_space='target'). A length-1 array is rejected even though the runtime function accepts scalar drift; just omit `default_variable` to use scalar drift mode.\n- `noise` as an array must be exactly length `dimension - 1`; any other length raises FunctionError.\n\nBehavioral notes:\n\n- The state stored in `previous_value` is always a unit vector; the function output is the new unit vector after one integration step.\n- Scalar drift uses a persistent `drift_dir` (a random tangent unit vector, parallel-transported each step). It is not user-settable through this tool; if you need a specific direction, supply a tangent-space `default_variable` of length dimension-1 instead.\n- In target mode with rate=1.0 and time_step_size=1.0 the system reaches the target in one step; 0<rate<1 moves only partway along the geodesic.\n- `dimension` is read-only after construction."
+TOOL_NOTES = 'Shape rules (the source of nearly every error in feedback for this tool):\n- `initializer` length must be EXACTLY `dimension` (Cartesian) or `dimension-1` (hyperspherical). Passing length-1 with dimension=25 fails with "must be a list or 1d array of length 25".\n- `initializer` must NOT be the all-zeros vector — it gets normalized and zero-norm raises FunctionError. Use e.g. [1, 0, 0, ...] (the implicit default) or any nonzero pattern.\n- `default_variable` must be length `dimension-1` (tangent template) or `dimension` (target template). A scalar [0] with dimension=25 fails with "must be length 24 (tangent template) or 25 (target template). Got 1." If unsure, omit `default_variable` entirely.\n- `offset` should be a scalar. Array offsets pass through PNL\'s StatefulFunction len>1 shape check that requires equality with default_variable\'s length, which mismatches in target mode and raises "parameters with len>1 ... don\'t have the same length as its \'default_variable\'".\n- `noise` array must be length `dimension-1`, not `dimension`.\n- previous_value is always renormalized to a unit vector after each step, so passing an unnormalized initializer is fine — but a zero vector still errors.\n- For geometric Brownian motion at sub-step accuracy, prefer small `time_step_size`; rate and noise are angular (radians) not linear units.\n- `dimension` is read-only after construction; recreate the function to change it.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -137,5 +127,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_drift_on_a_sphere_integrator(args: dict[str, Any] | None = None) -> Any:
-        'Create a PsyNeuLink DriftOnASphereIntegrator function: a stateful integrator whose state is a unit vector evolving on the sphere S^(dimension-1), with drift and isotropic/anisotropic noise applied in the tangent space and mapped back to the sphere via the exponential map.'
+        'Create a DriftOnASphereIntegrator function: an IntegratorFunction whose state is constrained to the unit sphere S^(dimension-1), updated via tangent-space drift+noise composed with the exponential map.'
         return _impl(args or {})

@@ -18,29 +18,28 @@ __pnl_parent_sha256s__ = {}
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'random_matrix'
-TOOL_DESCRIPTION = 'Call this tool to generate a 2D numpy array of random floats with a specified shape, useful for initializing weight matrices in PsyNeuLink Mechanisms and Projections. Returns a (num_rows × num_cols) numpy array where each entry equals (rand[0,1) + offset) * scale.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix.",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix.",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Amount added to each random value before scaling. Pass \'zero_center\' (case-insensitive) as a convenience for -0.5, which centers values around 0. Any other string raises an error.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative scale applied after offset. Values > 1 widen the range; values < 1 narrow it.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nThe docstring contains a typo stating \'ZERO_CENTER\' = -.05; the actual source sets offset = -0.5 (negative one-half), producing values in [-0.5, 0.5) before scaling. The string comparison is case-insensitive so both \'zero_center\' and \'ZERO_CENTER\' are accepted. Any other string value for offset raises a UtilitiesError. The function uses np.random.rand (uniform [0,1)), not np.random.randn (normal), so output is always uniformly distributed.'
+TOOL_DESCRIPTION = 'Call this tool to generate a 2D matrix of random float values with a specified shape, offset, and scale — for use as a weight matrix, input pattern, or any context requiring a random numpy array. Returns a 2D numpy array with shape (num_rows, num_cols) where each entry is (random_uniform[0,1] + offset) * scale.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix.",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix.",\n      "type": "integer"\n    },\n    "offset": {\n      "description": "Added to each random value before scaling. Pass the string \'zero_center\' (case-insensitive) as a shorthand for -0.5, which centers the default [0,1] range on 0. Otherwise pass a float. Default is 0.0.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "description": "Multiplicative factor applied after adding the offset. Widens or narrows the output range. Default is 1.0.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nThe docstring contains a typo: it says \'ZERO_CENTER\' is shorthand for -.05, but the source code sets offset = -0.5. The actual behavior is -0.5. With defaults (offset=0.0, scale=1.0), values are uniform floats in [0, 1). To get values in [-0.5, 0.5), use offset=-0.5 or offset=\'zero_center\'. Any string value for offset other than \'zero_center\' (case-insensitive) raises a UtilitiesError.'
 TOOL_PARAMETERS = { 'properties': { 'num_cols': { 'description': 'Number of columns in the output '
                                                'matrix.',
                                 'type': 'integer'},
                   'num_rows': { 'description': 'Number of rows in the output matrix.',
                                 'type': 'integer'},
-                  'offset': { 'default': 0,
-                              'description': 'Amount added to each random value before '
-                                             "scaling. Pass 'zero_center' "
-                                             '(case-insensitive) as a convenience for '
-                                             '-0.5, which centers values around 0. Any '
-                                             'other string raises an error.',
+                  'offset': { 'description': 'Added to each random value before '
+                                             "scaling. Pass the string 'zero_center' "
+                                             '(case-insensitive) as a shorthand for '
+                                             '-0.5, which centers the default [0,1] '
+                                             'range on 0. Otherwise pass a float. '
+                                             'Default is 0.0.',
                               'oneOf': [ {'type': 'number'},
                                          { 'enum': ['zero_center', 'ZERO_CENTER'],
                                            'type': 'string'}]},
-                  'scale': { 'default': 1,
-                             'description': 'Multiplicative scale applied after '
-                                            'offset. Values > 1 widen the range; '
-                                            'values < 1 narrow it.',
+                  'scale': { 'description': 'Multiplicative factor applied after '
+                                            'adding the offset. Widens or narrows the '
+                                            'output range. Default is 1.0.',
                              'type': 'number'}},
   'required': ['num_rows', 'num_cols'],
   'type': 'object'}
-TOOL_NOTES = "The docstring contains a typo stating 'ZERO_CENTER' = -.05; the actual source sets offset = -0.5 (negative one-half), producing values in [-0.5, 0.5) before scaling. The string comparison is case-insensitive so both 'zero_center' and 'ZERO_CENTER' are accepted. Any other string value for offset raises a UtilitiesError. The function uses np.random.rand (uniform [0,1)), not np.random.randn (normal), so output is always uniformly distributed."
+TOOL_NOTES = "The docstring contains a typo: it says 'ZERO_CENTER' is shorthand for -.05, but the source code sets offset = -0.5. The actual behavior is -0.5. With defaults (offset=0.0, scale=1.0), values are uniform floats in [0, 1). To get values in [-0.5, 0.5), use offset=-0.5 or offset='zero_center'. Any string value for offset other than 'zero_center' (case-insensitive) raises a UtilitiesError."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -65,5 +64,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def random_matrix(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to generate a 2D numpy array of random floats with a specified shape, useful for initializing weight matrices in PsyNeuLink Mechanisms and Projections.'
+        'Call this tool to generate a 2D matrix of random float values with a specified shape, offset, and scale — for use as a weight matrix, input pattern, or any context requiring a random numpy array.'
         return _impl(args or {})
