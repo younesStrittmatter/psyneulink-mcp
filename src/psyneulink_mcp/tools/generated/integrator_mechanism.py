@@ -28,72 +28,73 @@ __pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebeb
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_integrator_mechanism'
-TOOL_DESCRIPTION = 'Create an IntegratorMechanism — a ProcessingMechanism that, on each execution, applies an IntegratorFunction (e.g. AdaptiveIntegrator, DriftDiffusionIntegrator, DriftOnASphereIntegrator, AccumulatorIntegrator, OrnsteinUhlenbeckIntegrator) to its input and accumulates state across calls. Use it when you need a node that *remembers* across timesteps — leaky integration, evidence accumulation, drift-diffusion, or any path-dependent processing — rather than a stateless transform. Returns a Mechanism handle suitable for placement in a Composition; the integrator\'s running state lives on the mechanism and is reset via the `reset` parameter (non-zero → reset to initial value before computing output).\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Default input shape as a 1d list of numbers (or nested list for multi-port input). Its length MUST be compatible with the chosen function\'s expected variable shape \\u2014 see notes for DriftOnASphereIntegrator and other shape-sensitive integrators.",\n      "items": {},\n      "type": "array"\n    },\n    "function": {\n      "description": "An IntegratorFunction handle produced by the corresponding create_* tool (e.g. an AdaptiveIntegrator, DriftDiffusionIntegrator, LeakyCompetingIntegrator, DriftOnASphereIntegrator, AccumulatorIntegrator, OrnsteinUhlenbeckIntegrator handle). MUST be a function handle, not a string name. Defaults to AdaptiveIntegrator(rate=0.5) if omitted.",\n      "type": "string"\n    },\n    "input_ports": {\n      "description": "Optional list/dict specifying input ports (names or full specs). Most uses don\'t need this.",\n      "oneOf": [\n        {\n          "items": {},\n          "type": "array"\n        },\n        {\n          "type": "object"\n        }\n      ]\n    },\n    "input_shapes": {\n      "description": "Alternative to default_variable: an integer (or list of ints for multiple input_ports) giving the size of each input port. Use this when you only know the dimensionality, not concrete default values.",\n      "oneOf": [\n        {\n          "type": "integer"\n        },\n        {\n          "items": {\n            "type": "integer"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Optional name for the mechanism (used in logs and Composition graphs).",\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "Optional output port specification (name or iterable of names/specs).",\n      "oneOf": [\n        {\n          "type": "string"\n        },\n        {\n          "items": {},\n          "type": "array"\n        }\n      ]\n    },\n    "params": {\n      "description": "Optional dict of additional parameter overrides forwarded to the underlying constructor.",\n      "type": "object"\n    },\n    "reset_default": {\n      "default": 0,\n      "description": "Default value of the `reset` parameter. If non-zero at execution time, the mechanism resets its `value` to the function\'s initializer before computing output. Number, list, or 1d array.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\nDIMENSIONAL CONTRACT (this is the single most common failure mode, and is what recent feedback flagged): the IntegratorMechanism\'s `default_variable` length must match the variable shape that its `function` expects, otherwise PNL raises a numpy matmul / shape error during construction (not at runtime). Specific gotchas:\n\n- DriftOnASphereIntegrator embeds an N-sphere in N+1-D space: if the function has `dimension=D`, it expects a variable of length D-1. So a 24-dim drift on a sphere requires `dimension=25` on the function AND `default_variable` of length 24, OR omit `default_variable` and let the function\'s variable propagate. Passing `default_variable=[0]*24` with a DriftOnASphereIntegrator whose `dimension` was not set to 25 produces "matmul: size 1 is different from 24" because B is (25,24) and noise is scalar/length-1.\n- AdaptiveIntegrator, DriftDiffusionIntegrator, LeakyCompetingIntegrator, OrnsteinUhlenbeckIntegrator, AccumulatorIntegrator: variable length = output length; just keep `default_variable` and the function\'s `initializer`/`default_variable` consistent.\n\nOTHER:\n- `function` must be a function HANDLE returned by the matching create_* IntegratorFunction tool, not a class name string. Passing a stale handle string (e.g. from an older session) will fail to resolve.\n- `reset` is a Parameter with `constructor_argument=\'reset_default\'` — agents must use the kwarg name `reset_default` here; `reset` itself is read at execution time, not at construction.\n- The `reset` mechanic only triggers when `reset` evaluates non-zero AND the mechanism is not in initialization; it then resets `value` to the function\'s initializer and reshapes back to the prior output shape.\n- Inherits all standard Mechanism kwargs (input_ports, output_ports, params, name, prefs) — see the Mechanism / ProcessingMechanism tools for those semantics.\n- This is a stateful node: placing the same handle in two Compositions shares state across them; create separate mechanisms for independent runs.'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Default input shape as a 1d '
-                                                       'list of numbers (or nested '
-                                                       'list for multi-port input). '
-                                                       'Its length MUST be compatible '
-                                                       "with the chosen function's "
-                                                       'expected variable shape — see '
-                                                       'notes for '
-                                                       'DriftOnASphereIntegrator and '
-                                                       'other shape-sensitive '
-                                                       'integrators.',
-                                        'items': {},
-                                        'type': 'array'},
-                  'function': { 'description': 'An IntegratorFunction handle produced '
-                                               'by the corresponding create_* tool '
-                                               '(e.g. an AdaptiveIntegrator, '
+TOOL_DESCRIPTION = 'Create a PsyNeuLink IntegratorMechanism — a ProcessingMechanism specialized for accumulating input over time via an IntegratorFunction (default AdaptiveIntegrator(rate=0.5)). Use this when you need a Composition node whose value evolves stepwise (leaky/adaptive accumulation, drift-diffusion, FitzHugh-Nagumo, Ornstein-Uhlenbeck, etc.). Adds, beyond Mechanism/ProcessingMechanism: a `reset_default` knob that triggers `reset()` whenever the runtime `reset` parameter is non-zero, restoring the function\'s initial value. Returns a handle to register as a node in a Composition.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template for the input shape. Use a 1d list (e.g. [0, 0, 0]) for a single input port of width N, or a 2d list for multi-port. Must match the function\'s expected input width \\u2014 if the function was created with an explicit dimension, this must agree.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "oneOf": [\n              {\n                "type": "number"\n              },\n              {\n                "items": {\n                  "type": "number"\n                },\n                "type": "array"\n              }\n            ]\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "function": {\n      "description": "Handle of an IntegratorFunction created by a function-creation tool (e.g. AdaptiveIntegrator, DriftDiffusionIntegrator, OrnsteinUhlenbeckIntegrator, FitzHughNagumoIntegrator, DriftOnASphereIntegrator). Must accept a scalar/1d input and return a value of the same form. If omitted, AdaptiveIntegrator(rate=0.5) is used.",\n      "type": "string"\n    },\n    "input_ports": {\n      "description": "Input port spec \\u2014 list of names/specs or a dict. Omit for a single default input port.",\n      "oneOf": [\n        {\n          "items": {},\n          "type": "array"\n        },\n        {\n          "type": "object"\n        }\n      ]\n    },\n    "input_shapes": {\n      "description": "Alternative to default_variable: integer or list of integers giving input width(s). Sets the mechanism\'s variable to zeros of that shape.",\n      "oneOf": [\n        {\n          "minimum": 1,\n          "type": "integer"\n        },\n        {\n          "items": {\n            "minimum": 1,\n            "type": "integer"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Identifier for the mechanism within a Composition.",\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "Output port spec \\u2014 name string, list of names/specs.",\n      "oneOf": [\n        {\n          "type": "string"\n        },\n        {\n          "items": {},\n          "type": "array"\n        }\n      ]\n    },\n    "params": {\n      "description": "Optional dict of parameter overrides (rarely needed; prefer named arguments).",\n      "type": "object"\n    },\n    "prefs": {\n      "description": "PreferenceSet overrides; usually omit.",\n      "type": "object"\n    },\n    "reset_default": {\n      "description": "Default for the runtime `reset` parameter. When `reset` is set non-zero during a run, the mechanism resets its value to the function\'s initializer. Leave at 0 unless you intend to drive resets.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "oneOf": [\n              {\n                "type": "number"\n              },\n              {\n                "items": {\n                  "type": "number"\n                },\n                "type": "array"\n              }\n            ]\n          },\n          "type": "array"\n        }\n      ]\n    }\n  },\n  "required": [\n    "name"\n  ],\n  "type": "object"\n}\n\nNotes:\nShape rules for `function`: the mechanism\'s input width must match the function\'s input variable width. If you pass an instantiated function with a multi-element variable (e.g. width N>1) and either no `default_variable` or a length-1 default, the mechanism reshapes itself to N — but if you pass a length>1 `default_variable` that disagrees with the function\'s variable, you get IntegratorMechanismError "Shape of \'variable\' ... does not match ... \'default_variable\'".\n\nKnown broken case (verified, reported in feedback): `DriftOnASphereIntegrator` is asymmetric — input variable shape is (dimension-1,) while output value shape is (dimension,). Wrapping it in an IntegratorMechanism currently fails at function-instantiation time with `ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0 ... (size 1 is different from N)` regardless of how you spec `default_variable` / `input_shapes` (tried length-1, length-N, length-(N-1), and unspecified). The default input_port is built from the function\'s input variable but downstream projections expect output-shape, and there is no working spec on this tool today. Track upstream PNL fix; do not retry the same shape variants.\n\n`reset` is a *runtime* parameter, not an init kwarg — set `reset_default` here to seed it; toggle the actual reset by sending non-zero on the `reset` parameter port during execution.\n\nThe first positional-style argument in PNL examples is `name`; everything else is keyword. The tool layer passes all kwargs by name, so order doesn\'t matter.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template for the input shape. '
+                                                       'Use a 1d list (e.g. [0, 0, 0]) '
+                                                       'for a single input port of '
+                                                       'width N, or a 2d list for '
+                                                       'multi-port. Must match the '
+                                                       "function's expected input "
+                                                       'width — if the function was '
+                                                       'created with an explicit '
+                                                       'dimension, this must agree.',
+                                        'oneOf': [ {'type': 'number'},
+                                                   { 'items': { 'oneOf': [ { 'type': 'number'},
+                                                                           { 'items': { 'type': 'number'},
+                                                                             'type': 'array'}]},
+                                                     'type': 'array'}]},
+                  'function': { 'description': 'Handle of an IntegratorFunction '
+                                               'created by a function-creation tool '
+                                               '(e.g. AdaptiveIntegrator, '
                                                'DriftDiffusionIntegrator, '
-                                               'LeakyCompetingIntegrator, '
-                                               'DriftOnASphereIntegrator, '
-                                               'AccumulatorIntegrator, '
-                                               'OrnsteinUhlenbeckIntegrator handle). '
-                                               'MUST be a function handle, not a '
-                                               'string name. Defaults to '
-                                               'AdaptiveIntegrator(rate=0.5) if '
-                                               'omitted.',
+                                               'OrnsteinUhlenbeckIntegrator, '
+                                               'FitzHughNagumoIntegrator, '
+                                               'DriftOnASphereIntegrator). Must accept '
+                                               'a scalar/1d input and return a value '
+                                               'of the same form. If omitted, '
+                                               'AdaptiveIntegrator(rate=0.5) is used.',
                                 'type': 'string'},
-                  'input_ports': { 'description': 'Optional list/dict specifying input '
-                                                  'ports (names or full specs). Most '
-                                                  "uses don't need this.",
+                  'input_ports': { 'description': 'Input port spec — list of '
+                                                  'names/specs or a dict. Omit for a '
+                                                  'single default input port.',
                                    'oneOf': [ {'items': {}, 'type': 'array'},
                                               {'type': 'object'}]},
                   'input_shapes': { 'description': 'Alternative to default_variable: '
-                                                   'an integer (or list of ints for '
-                                                   'multiple input_ports) giving the '
-                                                   'size of each input port. Use this '
-                                                   'when you only know the '
-                                                   'dimensionality, not concrete '
-                                                   'default values.',
-                                    'oneOf': [ {'type': 'integer'},
-                                               { 'items': {'type': 'integer'},
+                                                   'integer or list of integers giving '
+                                                   'input width(s). Sets the '
+                                                   "mechanism's variable to zeros of "
+                                                   'that shape.',
+                                    'oneOf': [ {'minimum': 1, 'type': 'integer'},
+                                               { 'items': { 'minimum': 1,
+                                                            'type': 'integer'},
                                                  'type': 'array'}]},
-                  'name': { 'description': 'Optional name for the mechanism (used in '
-                                           'logs and Composition graphs).',
+                  'name': { 'description': 'Identifier for the mechanism within a '
+                                           'Composition.',
                             'type': 'string'},
-                  'output_ports': { 'description': 'Optional output port specification '
-                                                   '(name or iterable of names/specs).',
+                  'output_ports': { 'description': 'Output port spec — name string, '
+                                                   'list of names/specs.',
                                     'oneOf': [ {'type': 'string'},
                                                {'items': {}, 'type': 'array'}]},
-                  'params': { 'description': 'Optional dict of additional parameter '
-                                             'overrides forwarded to the underlying '
-                                             'constructor.',
+                  'params': { 'description': 'Optional dict of parameter overrides '
+                                             '(rarely needed; prefer named arguments).',
                               'type': 'object'},
-                  'reset_default': { 'default': 0,
-                                     'description': 'Default value of the `reset` '
-                                                    'parameter. If non-zero at '
-                                                    'execution time, the mechanism '
-                                                    'resets its `value` to the '
-                                                    "function's initializer before "
-                                                    'computing output. Number, list, '
-                                                    'or 1d array.',
+                  'prefs': { 'description': 'PreferenceSet overrides; usually omit.',
+                             'type': 'object'},
+                  'reset_default': { 'description': 'Default for the runtime `reset` '
+                                                    'parameter. When `reset` is set '
+                                                    'non-zero during a run, the '
+                                                    'mechanism resets its value to the '
+                                                    "function's initializer. Leave at "
+                                                    '0 unless you intend to drive '
+                                                    'resets.',
                                      'oneOf': [ {'type': 'number'},
-                                                { 'items': {'type': 'number'},
+                                                { 'items': { 'oneOf': [ { 'type': 'number'},
+                                                                        { 'items': { 'type': 'number'},
+                                                                          'type': 'array'}]},
                                                   'type': 'array'}]}},
-  'required': [],
+  'required': ['name'],
   'type': 'object'}
-TOOL_NOTES = 'DIMENSIONAL CONTRACT (this is the single most common failure mode, and is what recent feedback flagged): the IntegratorMechanism\'s `default_variable` length must match the variable shape that its `function` expects, otherwise PNL raises a numpy matmul / shape error during construction (not at runtime). Specific gotchas:\n\n- DriftOnASphereIntegrator embeds an N-sphere in N+1-D space: if the function has `dimension=D`, it expects a variable of length D-1. So a 24-dim drift on a sphere requires `dimension=25` on the function AND `default_variable` of length 24, OR omit `default_variable` and let the function\'s variable propagate. Passing `default_variable=[0]*24` with a DriftOnASphereIntegrator whose `dimension` was not set to 25 produces "matmul: size 1 is different from 24" because B is (25,24) and noise is scalar/length-1.\n- AdaptiveIntegrator, DriftDiffusionIntegrator, LeakyCompetingIntegrator, OrnsteinUhlenbeckIntegrator, AccumulatorIntegrator: variable length = output length; just keep `default_variable` and the function\'s `initializer`/`default_variable` consistent.\n\nOTHER:\n- `function` must be a function HANDLE returned by the matching create_* IntegratorFunction tool, not a class name string. Passing a stale handle string (e.g. from an older session) will fail to resolve.\n- `reset` is a Parameter with `constructor_argument=\'reset_default\'` — agents must use the kwarg name `reset_default` here; `reset` itself is read at execution time, not at construction.\n- The `reset` mechanic only triggers when `reset` evaluates non-zero AND the mechanism is not in initialization; it then resets `value` to the function\'s initializer and reshapes back to the prior output shape.\n- Inherits all standard Mechanism kwargs (input_ports, output_ports, params, name, prefs) — see the Mechanism / ProcessingMechanism tools for those semantics.\n- This is a stateful node: placing the same handle in two Compositions shares state across them; create separate mechanisms for independent runs.'
+TOOL_NOTES = 'Shape rules for `function`: the mechanism\'s input width must match the function\'s input variable width. If you pass an instantiated function with a multi-element variable (e.g. width N>1) and either no `default_variable` or a length-1 default, the mechanism reshapes itself to N — but if you pass a length>1 `default_variable` that disagrees with the function\'s variable, you get IntegratorMechanismError "Shape of \'variable\' ... does not match ... \'default_variable\'".\n\nKnown broken case (verified, reported in feedback): `DriftOnASphereIntegrator` is asymmetric — input variable shape is (dimension-1,) while output value shape is (dimension,). Wrapping it in an IntegratorMechanism currently fails at function-instantiation time with `ValueError: matmul: Input operand 1 has a mismatch in its core dimension 0 ... (size 1 is different from N)` regardless of how you spec `default_variable` / `input_shapes` (tried length-1, length-N, length-(N-1), and unspecified). The default input_port is built from the function\'s input variable but downstream projections expect output-shape, and there is no working spec on this tool today. Track upstream PNL fix; do not retry the same shape variants.\n\n`reset` is a *runtime* parameter, not an init kwarg — set `reset_default` here to seed it; toggle the actual reset by sending non-zero on the `reset` parameter port during execution.\n\nThe first positional-style argument in PNL examples is `name`; everything else is keyword. The tool layer passes all kwargs by name, so order doesn\'t matter.'
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -118,5 +119,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_integrator_mechanism(args: dict[str, Any] | None = None) -> Any:
-        'Create an IntegratorMechanism — a ProcessingMechanism that, on each execution, applies an IntegratorFunction (e.g.'
+        'Create a PsyNeuLink IntegratorMechanism — a ProcessingMechanism specialized for accumulating input over time via an IntegratorFunction (default AdaptiveIntegrator(rate=0.5)).'
         return _impl(args or {})

@@ -28,82 +28,85 @@ __pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebeb
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_processing_mechanism'
-TOOL_DESCRIPTION = 'Create a generic ProcessingMechanism — the default, function-agnostic Mechanism for feedforward processing nodes (input layers, transform stages, simple output layers) inside a Composition. Use this when you want a Mechanism whose only job is to apply a Function to its input and emit the result; pick a more specialized subclass (TransferMechanism, IntegratorMechanism, RecurrentTransferMechanism, etc.) only when you need their specific extras (integration mode, lateral connectivity, …). Beyond what `Mechanism_Base`/`Component` already document, ProcessingMechanism just adds an extended `standard_output_ports` set (MEAN, MEDIAN, STANDARD_DEVIATION, VARIANCE, MAX_VAL, MAX_ABS_VAL, MAX_ONE_HOT, MAX_ABS_ONE_HOT, MAX_INDICATOR, MAX_ABS_INDICATOR, PROB) that you can name in `output_ports`. Returns a Mechanism handle to use as a node when wiring a Composition.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template for the input value, given as a 2D list-of-lists (one inner list per InputPort). Determines the number and length of input ports. Use either this OR input_shapes, not both. Example: [[0, 0, 0]] = one InputPort of length 3.",\n      "items": {\n        "items": {\n          "type": "number"\n        },\n        "type": "array"\n      },\n      "type": "array"\n    },\n    "function": {\n      "description": "Name of the PNL Function class to apply to the input, e.g. \'Linear\', \'Logistic\', \'SoftMax\', \'Exponential\', \'ReLU\'. Must be a real PNL Function class name \\u2014 opaque handles or made-up identifiers will fail or be silently misinterpreted. Function output shape must match default_variable / input_shapes. Defaults to Linear (identity) if omitted.",\n      "type": "string"\n    },\n    "function_params": {\n      "additionalProperties": true,\n      "description": "Keyword arguments forwarded to the Function constructor (e.g. {\'slope\': 2.0, \'intercept\': 1.0} for Linear, {\'gain\': 1.0, \'bias\': 0.0, \'x_0\': 0.0} for Logistic). Optional.",\n      "type": "object"\n    },\n    "input_ports": {\n      "description": "Explicit InputPort specifications. Each entry can be a string name, a dict spec, or a reference to another Port/Mechanism. Usually omitted \\u2014 default_variable / input_shapes is enough.",\n      "items": {},\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Shorthand for default_variable. An int gives one InputPort of that length; a list of ints gives multiple InputPorts of those lengths. Example: 3 = one InputPort of length 3; [3, 2] = two InputPorts of lengths 3 and 2.",\n      "oneOf": [\n        {\n          "minimum": 1,\n          "type": "integer"\n        },\n        {\n          "items": {\n            "minimum": 1,\n            "type": "integer"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Human-readable name for the mechanism. Used in logs and graph plots; should be unique within a Composition.",\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "OutputPort specifications. Strings may name standard output ports: \'RESULT\' (default), plus the ProcessingMechanism extras \'MEAN\', \'MEDIAN\', \'STANDARD_DEVIATION\', \'VARIANCE\', \'MAX_VAL\', \'MAX_ABS_VAL\', \'MAX_ONE_HOT\', \'MAX_ABS_ONE_HOT\', \'MAX_INDICATOR\', \'MAX_ABS_INDICATOR\', \'PROB\'. Dict specs allow custom OutputPorts.",\n      "items": {},\n      "type": "array"\n    },\n    "params": {\n      "additionalProperties": true,\n      "description": "Dict of additional parameter overrides applied at construction. Rarely needed \\u2014 prefer top-level kwargs.",\n      "type": "object"\n    }\n  },\n  "required": [\n    "name"\n  ],\n  "type": "object"\n}\n\nNotes:\n- `function` must be a PsyNeuLink Function class name (string like \'Linear\', \'Logistic\'), not an arbitrary handle/identifier. Recent feedback shows agents passing opaque strings like \'h_ab495ac919ec\' — these are not resolvable and lead to dimension-mismatch errors deep inside the chosen function.\n- The function\'s expected variable shape MUST match `default_variable` / `input_shapes`. Stateful integrator functions in particular (DriftOnASphereIntegrator, OrnsteinUhlenbeckIntegrator, …) have constraints tying their internal state shape to `default_variable` — passing a 24-element default_variable with a function whose noise/state was sized for length 1 (or vice-versa) raises `ValueError: matmul: ... size 1 is different from 24` at construction time. Configure the function\'s own dimensional kwargs so they match before passing it in.\n- Provide either `default_variable` or `input_shapes`, not both — they\'re redundant and conflicting values raise.\n- `default_variable` is 2D (list of InputPort templates). A 1D list is auto-promoted to one InputPort but being explicit avoids surprises.\n- If `len(default_variable) > 1` AND the function is a TransferFunction, ProcessingMechanism auto-creates one OutputPort per InputPort, each named after its InputPort. Override by passing `output_ports` explicitly.\n- The returned object is a Mechanism instance (not yet in any Composition); add it to a Composition before running.'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template for the input value, '
-                                                       'given as a 2D list-of-lists '
-                                                       '(one inner list per '
-                                                       'InputPort). Determines the '
-                                                       'number and length of input '
-                                                       'ports. Use either this OR '
-                                                       'input_shapes, not both. '
-                                                       'Example: [[0, 0, 0]] = one '
-                                                       'InputPort of length 3.',
-                                        'items': { 'items': {'type': 'number'},
-                                                   'type': 'array'},
-                                        'type': 'array'},
-                  'function': { 'description': 'Name of the PNL Function class to '
-                                               "apply to the input, e.g. 'Linear', "
-                                               "'Logistic', 'SoftMax', 'Exponential', "
-                                               "'ReLU'. Must be a real PNL Function "
-                                               'class name — opaque handles or made-up '
-                                               'identifiers will fail or be silently '
-                                               'misinterpreted. Function output shape '
-                                               'must match default_variable / '
-                                               'input_shapes. Defaults to Linear '
-                                               '(identity) if omitted.',
-                                'type': 'string'},
-                  'function_params': { 'additionalProperties': True,
-                                       'description': 'Keyword arguments forwarded to '
-                                                      'the Function constructor (e.g. '
-                                                      "{'slope': 2.0, 'intercept': "
-                                                      "1.0} for Linear, {'gain': 1.0, "
-                                                      "'bias': 0.0, 'x_0': 0.0} for "
-                                                      'Logistic). Optional.',
-                                       'type': 'object'},
-                  'input_ports': { 'description': 'Explicit InputPort specifications. '
-                                                  'Each entry can be a string name, a '
-                                                  'dict spec, or a reference to '
-                                                  'another Port/Mechanism. Usually '
-                                                  'omitted — default_variable / '
-                                                  'input_shapes is enough.',
+TOOL_DESCRIPTION = 'Create a generic ProcessingMechanism — the default-purpose Mechanism for transforming inputs into outputs inside a Composition. Reach for this when no specialized subclass (TransferMechanism, IntegratorMechanism, etc.) applies and you just need a node that runs a function on its input. Returns an opaque handle to register with `add_node` / pathway helpers; the handle\'s value after execution is the function\'s output. Beyond the generic Mechanism contract (see INHERITS FROM), this class adds a richer `standard_output_ports` set (MEAN, MEDIAN, STANDARD_DEVIATION, VARIANCE, MAX_VAL, MAX_ABS_VAL, MAX_ONE_HOT, MAX_ABS_ONE_HOT, MAX_INDICATOR, MAX_ABS_INDICATOR, PROB) computed over the first item of the mechanism\'s value, selectable by name in `output_ports`.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template/initial input. Use a 2D list (list of input-port arrays) for multi-port mechanisms or a 1D list for a single port. Determines the shape the function must accept. Mutually informative with input_shapes \\u2014 supply one or the other, not both.",\n      "oneOf": [\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        },\n        {\n          "items": {\n            "items": {\n              "type": "number"\n            },\n            "type": "array"\n          },\n          "type": "array"\n        },\n        {\n          "type": "number"\n        }\n      ]\n    },\n    "function": {\n      "description": "Function applied to the mechanism\'s variable each timestep. Accepts a function-handle string returned by another tool (e.g. a Linear, Logistic, DriftOnASphereIntegrator handle). If omitted, PNL uses the class default (Linear). The function\'s expected input shape must match default_variable / input_shapes \\u2014 see notes."\n    },\n    "input_ports": {\n      "description": "Optional list of InputPort specifications. Each entry can be a string name, an int (size), a dict spec (e.g. {NAME, INPUT_SHAPES, PROJECTIONS}), or a handle to another Mechanism/OutputPort to project from. Length must match the outer dimension of default_variable / input_shapes.",\n      "items": {},\n      "type": "array"\n    },\n    "input_shapes": {\n      "description": "Shorthand for the size of each InputPort. An int creates one InputPort of that length; a list of ints creates one InputPort per entry with the given length. Use this instead of default_variable when you don\'t need specific initial values.",\n      "oneOf": [\n        {\n          "minimum": 1,\n          "type": "integer"\n        },\n        {\n          "items": {\n            "minimum": 1,\n            "type": "integer"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "name": {\n      "description": "Human-readable name for the mechanism; used in logs, in Composition graph displays, and as the key when other components reference this one.",\n      "type": "string"\n    },\n    "output_ports": {\n      "description": "Optional list of OutputPort specifications. Strings may name standard output ports \\u2014 for ProcessingMechanism these include MEAN, MEDIAN, STANDARD_DEVIATION, VARIANCE, MAX_VAL, MAX_ABS_VAL, MAX_ONE_HOT, MAX_ABS_ONE_HOT, MAX_INDICATOR, MAX_ABS_INDICATOR, PROB \\u2014 in addition to those inherited from Mechanism. Dict specs allow custom names/variables. If function is a TransferFunction and there are multiple input ports, ports are auto-mirrored 1:1 unless overridden.",\n      "items": {},\n      "type": "array"\n    },\n    "params": {\n      "description": "Optional dict of parameter overrides applied at construction. Prefer top-level kwargs when they exist.",\n      "type": "object"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- Function/input shape must agree. The recent feedback case passed a DriftOnASphereIntegrator handle with `default_variable=[[0]*24]`, which crashed in `matmul` because that integrator interprets its `dimension` parameter as N+1 of the input vector — so a 24-d input requires `dimension=25` on the integrator, not `dimension=24`. When wiring stateful integrator functions (DriftOnASphereIntegrator, OrnsteinUhlenbeck, etc.) through this mechanism, make sure the function was built for the exact input shape you give the mechanism here; if you change `default_variable`/`input_shapes`, rebuild the function handle with matching dimensions.\\n- Pass either `default_variable` or `input_shapes`, not both — they specify the same thing in different ways and PNL will warn or error on conflict.\\n- `default_variable` is 2D in the general case (one row per InputPort). A bare 1D list is auto-promoted to a single InputPort.\\n- `output_ports` strings are matched case-sensitively against PNL\'s standard names. Unknown strings are treated as new OutputPort names with default behavior, not an error — typos won\'t surface until execution.\\n- When `function` is a TransferFunction and there are multiple InputPorts, the mechanism auto-creates one OutputPort per InputPort (named to match) unless you supply `output_ports` explicitly. Supplying fewer `output_ports` than InputPorts triggers a partial-fill behavior in `_instantiate_output_ports` that may surprise you — supply one per InputPort if you care about the mapping.\\n- Returns a handle, not a numeric result. To execute, add the handle to a Composition and run that.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template/initial input. Use a '
+                                                       '2D list (list of input-port '
+                                                       'arrays) for multi-port '
+                                                       'mechanisms or a 1D list for a '
+                                                       'single port. Determines the '
+                                                       'shape the function must '
+                                                       'accept. Mutually informative '
+                                                       'with input_shapes — supply one '
+                                                       'or the other, not both.',
+                                        'oneOf': [ { 'items': {'type': 'number'},
+                                                     'type': 'array'},
+                                                   { 'items': { 'items': { 'type': 'number'},
+                                                                'type': 'array'},
+                                                     'type': 'array'},
+                                                   {'type': 'number'}]},
+                  'function': { 'description': "Function applied to the mechanism's "
+                                               'variable each timestep. Accepts a '
+                                               'function-handle string returned by '
+                                               'another tool (e.g. a Linear, Logistic, '
+                                               'DriftOnASphereIntegrator handle). If '
+                                               'omitted, PNL uses the class default '
+                                               "(Linear). The function's expected "
+                                               'input shape must match '
+                                               'default_variable / input_shapes — see '
+                                               'notes.'},
+                  'input_ports': { 'description': 'Optional list of InputPort '
+                                                  'specifications. Each entry can be a '
+                                                  'string name, an int (size), a dict '
+                                                  'spec (e.g. {NAME, INPUT_SHAPES, '
+                                                  'PROJECTIONS}), or a handle to '
+                                                  'another Mechanism/OutputPort to '
+                                                  'project from. Length must match the '
+                                                  'outer dimension of default_variable '
+                                                  '/ input_shapes.',
                                    'items': {},
                                    'type': 'array'},
-                  'input_shapes': { 'description': 'Shorthand for default_variable. An '
-                                                   'int gives one InputPort of that '
-                                                   'length; a list of ints gives '
-                                                   'multiple InputPorts of those '
-                                                   'lengths. Example: 3 = one '
-                                                   'InputPort of length 3; [3, 2] = '
-                                                   'two InputPorts of lengths 3 and 2.',
+                  'input_shapes': { 'description': 'Shorthand for the size of each '
+                                                   'InputPort. An int creates one '
+                                                   'InputPort of that length; a list '
+                                                   'of ints creates one InputPort per '
+                                                   'entry with the given length. Use '
+                                                   'this instead of default_variable '
+                                                   "when you don't need specific "
+                                                   'initial values.',
                                     'oneOf': [ {'minimum': 1, 'type': 'integer'},
                                                { 'items': { 'minimum': 1,
                                                             'type': 'integer'},
                                                  'type': 'array'}]},
-                  'name': { 'description': 'Human-readable name for the mechanism. '
-                                           'Used in logs and graph plots; should be '
-                                           'unique within a Composition.',
+                  'name': { 'description': 'Human-readable name for the mechanism; '
+                                           'used in logs, in Composition graph '
+                                           'displays, and as the key when other '
+                                           'components reference this one.',
                             'type': 'string'},
-                  'output_ports': { 'description': 'OutputPort specifications. Strings '
-                                                   'may name standard output ports: '
-                                                   "'RESULT' (default), plus the "
-                                                   "ProcessingMechanism extras 'MEAN', "
-                                                   "'MEDIAN', 'STANDARD_DEVIATION', "
-                                                   "'VARIANCE', 'MAX_VAL', "
-                                                   "'MAX_ABS_VAL', 'MAX_ONE_HOT', "
-                                                   "'MAX_ABS_ONE_HOT', "
-                                                   "'MAX_INDICATOR', "
-                                                   "'MAX_ABS_INDICATOR', 'PROB'. Dict "
-                                                   'specs allow custom OutputPorts.',
+                  'output_ports': { 'description': 'Optional list of OutputPort '
+                                                   'specifications. Strings may name '
+                                                   'standard output ports — for '
+                                                   'ProcessingMechanism these include '
+                                                   'MEAN, MEDIAN, STANDARD_DEVIATION, '
+                                                   'VARIANCE, MAX_VAL, MAX_ABS_VAL, '
+                                                   'MAX_ONE_HOT, MAX_ABS_ONE_HOT, '
+                                                   'MAX_INDICATOR, MAX_ABS_INDICATOR, '
+                                                   'PROB — in addition to those '
+                                                   'inherited from Mechanism. Dict '
+                                                   'specs allow custom '
+                                                   'names/variables. If function is a '
+                                                   'TransferFunction and there are '
+                                                   'multiple input ports, ports are '
+                                                   'auto-mirrored 1:1 unless '
+                                                   'overridden.',
                                     'items': {},
                                     'type': 'array'},
-                  'params': { 'additionalProperties': True,
-                              'description': 'Dict of additional parameter overrides '
-                                             'applied at construction. Rarely needed — '
-                                             'prefer top-level kwargs.',
+                  'params': { 'description': 'Optional dict of parameter overrides '
+                                             'applied at construction. Prefer '
+                                             'top-level kwargs when they exist.',
                               'type': 'object'}},
-  'required': ['name'],
+  'required': [],
   'type': 'object'}
-TOOL_NOTES = "- `function` must be a PsyNeuLink Function class name (string like 'Linear', 'Logistic'), not an arbitrary handle/identifier. Recent feedback shows agents passing opaque strings like 'h_ab495ac919ec' — these are not resolvable and lead to dimension-mismatch errors deep inside the chosen function.\n- The function's expected variable shape MUST match `default_variable` / `input_shapes`. Stateful integrator functions in particular (DriftOnASphereIntegrator, OrnsteinUhlenbeckIntegrator, …) have constraints tying their internal state shape to `default_variable` — passing a 24-element default_variable with a function whose noise/state was sized for length 1 (or vice-versa) raises `ValueError: matmul: ... size 1 is different from 24` at construction time. Configure the function's own dimensional kwargs so they match before passing it in.\n- Provide either `default_variable` or `input_shapes`, not both — they're redundant and conflicting values raise.\n- `default_variable` is 2D (list of InputPort templates). A 1D list is auto-promoted to one InputPort but being explicit avoids surprises.\n- If `len(default_variable) > 1` AND the function is a TransferFunction, ProcessingMechanism auto-creates one OutputPort per InputPort, each named after its InputPort. Override by passing `output_ports` explicitly.\n- The returned object is a Mechanism instance (not yet in any Composition); add it to a Composition before running."
+TOOL_NOTES = "- Function/input shape must agree. The recent feedback case passed a DriftOnASphereIntegrator handle with `default_variable=[[0]*24]`, which crashed in `matmul` because that integrator interprets its `dimension` parameter as N+1 of the input vector — so a 24-d input requires `dimension=25` on the integrator, not `dimension=24`. When wiring stateful integrator functions (DriftOnASphereIntegrator, OrnsteinUhlenbeck, etc.) through this mechanism, make sure the function was built for the exact input shape you give the mechanism here; if you change `default_variable`/`input_shapes`, rebuild the function handle with matching dimensions.\\n- Pass either `default_variable` or `input_shapes`, not both — they specify the same thing in different ways and PNL will warn or error on conflict.\\n- `default_variable` is 2D in the general case (one row per InputPort). A bare 1D list is auto-promoted to a single InputPort.\\n- `output_ports` strings are matched case-sensitively against PNL's standard names. Unknown strings are treated as new OutputPort names with default behavior, not an error — typos won't surface until execution.\\n- When `function` is a TransferFunction and there are multiple InputPorts, the mechanism auto-creates one OutputPort per InputPort (named to match) unless you supply `output_ports` explicitly. Supplying fewer `output_ports` than InputPorts triggers a partial-fill behavior in `_instantiate_output_ports` that may surprise you — supply one per InputPort if you care about the mapping.\\n- Returns a handle, not a numeric result. To execute, add the handle to a Composition and run that."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -128,5 +131,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_processing_mechanism(args: dict[str, Any] | None = None) -> Any:
-        'Create a generic ProcessingMechanism — the default, function-agnostic Mechanism for feedforward processing nodes (input layers, transform stages, simple output layers) inside a Composition.'
+        'Create a generic ProcessingMechanism — the default-purpose Mechanism for transforming inputs into outputs inside a Composition.'
         return _impl(args or {})
