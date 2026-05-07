@@ -18,32 +18,28 @@ __pnl_parent_sha256s__ = {}
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'random_matrix'
-TOOL_DESCRIPTION = 'Call this tool to generate a random 2D weight matrix for use as a connection matrix between PsyNeuLink mechanisms or projections. Returns a 2D numpy array of shape (num_rows, num_cols) where each entry is `(random_uniform[0,1) + offset) * scale`. Use when you need a randomized initial weight matrix rather than a fixed or identity matrix.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix; typically matches the size of the receiving layer.",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix; typically matches the size of the sending layer.",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Amount added to each raw random value before scaling. Pass \'ZERO_CENTER\' (case-insensitive) as a shorthand for -0.5, which centers values around 0. Any other string raises an error.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "ZERO_CENTER",\n            "zero_center"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative factor applied after offset. Use to widen or narrow the output range.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\n- Raw random values are drawn from uniform [0, 1), so with defaults the output range is [0, 1).\n- \'ZERO_CENTER\' maps to offset=-0.5, giving an output range of [-0.5, 0.5) before scaling; note the docstring contains a typo (\'-.05\') but the source correctly uses -0.5.\n- Any string value for `offset` other than \'ZERO_CENTER\' (case-insensitive) raises a UtilitiesError at runtime.\n- The function uses `np.random.rand` with no seed control — results are non-deterministic. Set `np.random.seed` externally before calling if reproducibility is needed.\n- The returned array is a plain numpy ndarray, not a PsyNeuLink object; it can be passed directly to matrix parameters of projections or mechanisms.'
+TOOL_DESCRIPTION = 'Call this tool to generate a 2D NumPy array of random floats for use as a weight matrix or connectivity pattern in PsyNeuLink models. Returns a (num_rows × num_cols) array with values drawn from a uniform distribution, optionally shifted and scaled — ready to pass as a `matrix` parameter to a MappingProjection or similar.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "num_cols": {\n      "description": "Number of columns in the output matrix.",\n      "type": "integer"\n    },\n    "num_rows": {\n      "description": "Number of rows in the output matrix.",\n      "type": "integer"\n    },\n    "offset": {\n      "default": 0,\n      "description": "Amount added to each random value before scaling. Pass \'zero_center\' (or \'ZERO_CENTER\') to use -0.5, which centers the distribution around 0.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "enum": [\n            "zero_center",\n            "ZERO_CENTER"\n          ],\n          "type": "string"\n        }\n      ]\n    },\n    "scale": {\n      "default": 1,\n      "description": "Multiplicative scale applied after the offset. Widens or narrows the value range.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "num_rows",\n    "num_cols"\n  ],\n  "type": "object"\n}\n\nNotes:\nValues are drawn from np.random.rand (uniform [0, 1]) then transformed as (rand + offset) * scale. With defaults, output is in [0.0, 1.0]. Using offset=-0.5 / \'zero_center\' shifts the range to [-0.5, 0.5]; applying scale=2 further widens it to [-1.0, 1.0]. The docstring contains a typo: \'zero_center\' maps to -0.5, not -.05 as stated. Any offset string other than \'zero_center\' / \'ZERO_CENTER\' raises a UtilitiesError. There is no seed parameter — output is non-deterministic each call.'
 TOOL_PARAMETERS = { 'properties': { 'num_cols': { 'description': 'Number of columns in the output '
-                                               'matrix; typically matches the size of '
-                                               'the receiving layer.',
+                                               'matrix.',
                                 'type': 'integer'},
-                  'num_rows': { 'description': 'Number of rows in the output matrix; '
-                                               'typically matches the size of the '
-                                               'sending layer.',
+                  'num_rows': { 'description': 'Number of rows in the output matrix.',
                                 'type': 'integer'},
                   'offset': { 'default': 0,
-                              'description': 'Amount added to each raw random value '
-                                             "before scaling. Pass 'ZERO_CENTER' "
-                                             '(case-insensitive) as a shorthand for '
-                                             '-0.5, which centers values around 0. Any '
-                                             'other string raises an error.',
+                              'description': 'Amount added to each random value before '
+                                             "scaling. Pass 'zero_center' (or "
+                                             "'ZERO_CENTER') to use -0.5, which "
+                                             'centers the distribution around 0.',
                               'oneOf': [ {'type': 'number'},
-                                         { 'enum': ['ZERO_CENTER', 'zero_center'],
+                                         { 'enum': ['zero_center', 'ZERO_CENTER'],
                                            'type': 'string'}]},
                   'scale': { 'default': 1,
-                             'description': 'Multiplicative factor applied after '
-                                            'offset. Use to widen or narrow the output '
+                             'description': 'Multiplicative scale applied after the '
+                                            'offset. Widens or narrows the value '
                                             'range.',
                              'type': 'number'}},
   'required': ['num_rows', 'num_cols'],
   'type': 'object'}
-TOOL_NOTES = "- Raw random values are drawn from uniform [0, 1), so with defaults the output range is [0, 1).\n- 'ZERO_CENTER' maps to offset=-0.5, giving an output range of [-0.5, 0.5) before scaling; note the docstring contains a typo ('-.05') but the source correctly uses -0.5.\n- Any string value for `offset` other than 'ZERO_CENTER' (case-insensitive) raises a UtilitiesError at runtime.\n- The function uses `np.random.rand` with no seed control — results are non-deterministic. Set `np.random.seed` externally before calling if reproducibility is needed.\n- The returned array is a plain numpy ndarray, not a PsyNeuLink object; it can be passed directly to matrix parameters of projections or mechanisms."
+TOOL_NOTES = "Values are drawn from np.random.rand (uniform [0, 1]) then transformed as (rand + offset) * scale. With defaults, output is in [0.0, 1.0]. Using offset=-0.5 / 'zero_center' shifts the range to [-0.5, 0.5]; applying scale=2 further widens it to [-1.0, 1.0]. The docstring contains a typo: 'zero_center' maps to -0.5, not -.05 as stated. Any offset string other than 'zero_center' / 'ZERO_CENTER' raises a UtilitiesError. There is no seed parameter — output is non-deterministic each call."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -68,5 +64,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def random_matrix(args: dict[str, Any] | None = None) -> Any:
-        'Call this tool to generate a random 2D weight matrix for use as a connection matrix between PsyNeuLink mechanisms or projections.'
+        'Call this tool to generate a 2D NumPy array of random floats for use as a weight matrix or connectivity pattern in PsyNeuLink models.'
         return _impl(args or {})

@@ -11,81 +11,106 @@ from psyneulink_mcp import handles
 from psyneulink_mcp.feedback import captured_tool
 
 __source_sha256__ = 'e1fac85c4630b6ae2852fa07700431b619a6aa55eac9a133a8a8e5bbb8ff8e95'
-__pnl_qualname__ = 'psyneulink.DriftOnASphereIntegrator'
+__pnl_qualname__ = 'psyneulink.core.components.functions.stateful.integratorfunctions.DriftOnASphereIntegrator'
 __pnl_kind__ = 'class'
+__pnl_parents__ = ['IntegratorFunction',
+ 'StatefulFunction',
+ 'Function_Base',
+ 'Function',
+ 'ShellClass',
+ 'Component',
+ 'MDFSerializable']
+__pnl_parent_sha256s__ = {'Component': 'b878afca9fca90ac1a952605ca8d39a37f25ebebf1411a7f545b9c48a3eaeec3',
+ 'Function': '49ff0535055d97328c0f76806a53021714e2f8577d138152b75b7e15fcaab2e3',
+ 'Function_Base': '9b4c0d2feb23147f7d25af3ae03decf546fdb1f2e8be53abb8d8168801d60afa',
+ 'IntegratorFunction': '8a17d1e7ef745b7ec20cf5925290acde573cbabda2806b3a7aa26ce0cc966916',
+ 'MDFSerializable': 'caad6059e8ef158be1269a23127f13da3733824c3585f9b4d6e3a63de82f65da',
+ 'ShellClass': 'adc23754ebeb0c55bdde1324622b33a509116703503508ee7e7de181a8afeee6',
+ 'StatefulFunction': 'b49d4a3b9b27486e488e3eb62eb3a9313fc20a2170b37eebb6b79b803fa7dedb'}
 __generated_by__ = 'claude_cli@sonnet'
 
 TOOL_NAME = 'create_drift_on_a_sphere_integrator'
-TOOL_DESCRIPTION = 'Use this tool to create a DriftOnASphereIntegrator when you need geometric Brownian motion on a unit sphere S^(d-1) — e.g., modeling neural population states that evolve on a spherical manifold. Each call to the resulting function advances the state one integration step via the exponential map and returns a unit vector (the new position on the sphere). Choose this over standard integrators when the state space is inherently spherical and you need drift+noise that respects the sphere\'s geometry.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template for the drift input. In tangent/auto mode: length dimension-1 (tangent coords). In target mode: length dimension (target point on sphere). Omit to use zeros of the appropriate shape.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "dimension": {\n      "default": 3,\n      "description": "Ambient embedding dimension; sphere is S^(dimension-1). Must be >= 2.",\n      "type": "integer"\n    },\n    "initializer": {\n      "description": "Starting point. Length dimension = Cartesian coordinates (will be normalized). Length dimension-1 = hyperspherical angles. Defaults to [1, 0, 0, ...] (north pole).",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_space": {\n      "default": "auto",\n      "description": "Controls how vector drift input is interpreted. \'tangent\': input is length d-1 tangent-space displacement. \'target\': input is length d Cartesian target on sphere (drift is geodesic toward it). \'auto\': infers from input length (d-1 \\u2192 tangent, d \\u2192 target with a one-time warning).",\n      "enum": [\n        "auto",\n        "tangent",\n        "target"\n      ],\n      "type": "string"\n    },\n    "noise": {\n      "default": 0,\n      "description": "Diffusion magnitude. Scalar for isotropic noise; 1D array of length dimension-1 for anisotropic noise in tangent coordinates.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "offset": {\n      "default": 0,\n      "description": "Additive drift term projected into tangent space.",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "params": {\n      "description": "Optional parameter override dictionary passed to PsyNeuLink.",\n      "type": "object"\n    },\n    "rate": {\n      "default": 1,\n      "description": "Scales the drift. In scalar mode: angular velocity multiplier. In tangent mode: scales the angular step. In target mode: fraction of remaining geodesic distance per step (1.0 = reach target in one step with dt=1.0).",\n      "oneOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ]\n    },\n    "seed": {\n      "description": "Integer seed for the internal random number generator. Omit for non-reproducible noise.",\n      "type": "integer"\n    },\n    "time_step_size": {\n      "default": 1,\n      "description": "Integration time step dt. Drift scales as dt; noise scales as sqrt(dt).",\n      "type": "number"\n    }\n  },\n  "required": [],\n  "type": "object"\n}\n\nNotes:\n- `input_space` is not listed in the class signature but is accepted as a kwarg and controls tangent vs. target drift mode — set it explicitly to avoid the auto-detection RuntimeWarning.\n- In target mode with rate=1.0 and time_step_size=1.0, the integrator reaches the target in exactly one step; use 0 < rate < 1 for gradual movement.\n- `noise` array length must be dimension-1 (tangent coords), NOT dimension — passing an array of length dimension raises FunctionError.\n- `initializer` of length dimension is treated as Cartesian (normalized); length dimension-1 is treated as hyperspherical angles, not Cartesian.\n- The drift direction (`drift_dir`) for scalar inputs is initialized randomly and parallel-transported each step; results are not reproducible without `seed`.\n- `dimension` is read-only after construction; to change dimension, create a new instance.\n- `offset` is described as additive but is projected into tangent space — it does not shift the output in Euclidean space.\n- Scalar drift input scales the persistent drift direction vector, not the angle directly; the effective rotation magnitude is rate * |variable| * dt radians.'
-TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template for the drift input. '
-                                                       'In tangent/auto mode: length '
-                                                       'dimension-1 (tangent coords). '
-                                                       'In target mode: length '
-                                                       'dimension (target point on '
-                                                       'sphere). Omit to use zeros of '
-                                                       'the appropriate shape.',
+TOOL_DESCRIPTION = 'Build a `DriftOnASphereIntegrator` function for use inside a Mechanism (typically an IntegratorMechanism). Use this when you need a stateful integrator whose value is constrained to the unit sphere S^(dimension-1) — i.e., the previous_value is always a unit vector and updates are computed in the tangent space and mapped back via the exponential map (correct geometric Brownian motion on a sphere). Beyond its IntegratorFunction parent, it adds the `dimension` parameter and three input interpretations selected by `input_space` ("auto" | "tangent" | "target"): scalar drift along a parallel-transported persistent direction, length-(dimension-1) tangent displacement, or length-dimension target point on the sphere. Returns a function handle to attach to a mechanism\'s `function=` argument.\n\nParameters (JSON Schema):\n{\n  "properties": {\n    "default_variable": {\n      "description": "Template for runtime drift input. In tangent mode use length d-1; in target mode use length d. If omitted, defaults to zeros of length d-1 (or length d when input_space=\'target\'). NOTE: PNL validates that any array-valued parameter (rate, noise, offset) has the same length as default_variable, so set default_variable consistently with how you size those arrays.",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "dimension": {\n      "default": 3,\n      "description": "Ambient dimension d of R^d; the state lives on S^(d-1). Must be >= 2.",\n      "minimum": 2,\n      "type": "integer"\n    },\n    "initializer": {\n      "description": "Starting point. Length d = Cartesian (normalized to unit length); length d-1 = hyperspherical angles converted to Cartesian. Must not be the zero vector. If omitted, defaults to e_0 = [1, 0, ..., 0].",\n      "items": {\n        "type": "number"\n      },\n      "type": "array"\n    },\n    "input_space": {\n      "default": "auto",\n      "description": "How to interpret a vector `variable` at runtime. \'tangent\' = length d-1 displacement; \'target\' = length d point on the sphere (magnitude ignored); \'auto\' infers from length. A scalar `variable` always drives the persistent drift_dir regardless of this setting.",\n      "enum": [\n        "auto",\n        "tangent",\n        "target"\n      ],\n      "type": "string"\n    },\n    "noise": {\n      "anyOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ],\n      "default": 0,\n      "description": "Diffusion. Scalar = isotropic on the sphere; 1d array of length d-1 = anisotropic in tangent coordinates. Scaled by sqrt(time_step_size)."\n    },\n    "offset": {\n      "anyOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ],\n      "default": 0,\n      "description": "Additive drift term, projected into the tangent space. Prefer a scalar. If you pass an array its length MUST equal default_variable\'s length (PNL validates this \\u2014 passing length d-1 alongside a length-d default_variable, or vice versa, raises FunctionError)."\n    },\n    "rate": {\n      "anyOf": [\n        {\n          "type": "number"\n        },\n        {\n          "items": {\n            "type": "number"\n          },\n          "type": "array"\n        }\n      ],\n      "default": 1,\n      "description": "Angular velocity scaling. Scalar, or 1d array matching default_variable length. In target mode, rate=1.0 with time_step_size=1.0 reaches the target in one step; 0<rate<1 moves partway."\n    },\n    "seed": {\n      "description": "Seed for the internal RandomState used for diffusion noise.",\n      "type": "integer"\n    },\n    "time_step_size": {\n      "default": 1,\n      "description": "Integration step dt. Drift contributes dt * drift_tangent; noise contributes sqrt(dt) * noise_tangent.",\n      "type": "number"\n    }\n  },\n  "required": [\n    "dimension"\n  ],\n  "type": "object"\n}\n\nNotes:\nPNL parameter-length validation gotcha (root cause of the recent feedback issue): the parent `IntegratorFunction._validate_params` enforces that EVERY array-valued parameter (rate/noise/offset) has the same length as `default_variable`. This conflicts with the mathematical convention that offset/noise live in the tangent space (length d-1) while a target-mode default_variable has length d. Safe recipes: (a) keep offset/rate as scalars whenever possible; (b) if you pass an array offset, make its length exactly match default_variable; (c) for target mode (input_space=\'target\', default_variable length d), only scalar offset is reliable. Other things to know: previous_value is always re-normalized to unit length; in target mode the magnitude of `variable` is ignored (it is projected to the sphere); a scalar `variable` drives a persistent `drift_dir` that is parallel-transported each step; \'auto\' input_space emits a one-time RuntimeWarning when it interprets a length-d vector as a target — set input_space explicitly to silence it; `dimension` is read-only after construction and must be >= 2; antipodal target points pick an arbitrary tangent direction via Householder basis.'
+TOOL_PARAMETERS = { 'properties': { 'default_variable': { 'description': 'Template for runtime drift '
+                                                       'input. In tangent mode use '
+                                                       'length d-1; in target mode use '
+                                                       'length d. If omitted, defaults '
+                                                       'to zeros of length d-1 (or '
+                                                       'length d when '
+                                                       "input_space='target'). NOTE: "
+                                                       'PNL validates that any '
+                                                       'array-valued parameter (rate, '
+                                                       'noise, offset) has the same '
+                                                       'length as default_variable, so '
+                                                       'set default_variable '
+                                                       'consistently with how you size '
+                                                       'those arrays.',
                                         'items': {'type': 'number'},
                                         'type': 'array'},
                   'dimension': { 'default': 3,
-                                 'description': 'Ambient embedding dimension; sphere '
-                                                'is S^(dimension-1). Must be >= 2.',
+                                 'description': 'Ambient dimension d of R^d; the state '
+                                                'lives on S^(d-1). Must be >= 2.',
+                                 'minimum': 2,
                                  'type': 'integer'},
-                  'initializer': { 'description': 'Starting point. Length dimension = '
-                                                  'Cartesian coordinates (will be '
-                                                  'normalized). Length dimension-1 = '
-                                                  'hyperspherical angles. Defaults to '
-                                                  '[1, 0, 0, ...] (north pole).',
+                  'initializer': { 'description': 'Starting point. Length d = '
+                                                  'Cartesian (normalized to unit '
+                                                  'length); length d-1 = '
+                                                  'hyperspherical angles converted to '
+                                                  'Cartesian. Must not be the zero '
+                                                  'vector. If omitted, defaults to e_0 '
+                                                  '= [1, 0, ..., 0].',
                                    'items': {'type': 'number'},
                                    'type': 'array'},
                   'input_space': { 'default': 'auto',
-                                   'description': 'Controls how vector drift input is '
-                                                  "interpreted. 'tangent': input is "
-                                                  'length d-1 tangent-space '
-                                                  "displacement. 'target': input is "
-                                                  'length d Cartesian target on sphere '
-                                                  '(drift is geodesic toward it). '
-                                                  "'auto': infers from input length "
-                                                  '(d-1 → tangent, d → target with a '
-                                                  'one-time warning).',
+                                   'description': 'How to interpret a vector '
+                                                  "`variable` at runtime. 'tangent' = "
+                                                  "length d-1 displacement; 'target' = "
+                                                  'length d point on the sphere '
+                                                  "(magnitude ignored); 'auto' infers "
+                                                  'from length. A scalar `variable` '
+                                                  'always drives the persistent '
+                                                  'drift_dir regardless of this '
+                                                  'setting.',
                                    'enum': ['auto', 'tangent', 'target'],
                                    'type': 'string'},
-                  'noise': { 'default': 0,
-                             'description': 'Diffusion magnitude. Scalar for isotropic '
-                                            'noise; 1D array of length dimension-1 for '
-                                            'anisotropic noise in tangent coordinates.',
-                             'oneOf': [ {'type': 'number'},
-                                        { 'items': {'type': 'number'},
-                                          'type': 'array'}]},
-                  'offset': { 'default': 0,
-                              'description': 'Additive drift term projected into '
-                                             'tangent space.',
-                              'oneOf': [ {'type': 'number'},
+                  'noise': { 'anyOf': [ {'type': 'number'},
+                                        {'items': {'type': 'number'}, 'type': 'array'}],
+                             'default': 0,
+                             'description': 'Diffusion. Scalar = isotropic on the '
+                                            'sphere; 1d array of length d-1 = '
+                                            'anisotropic in tangent coordinates. '
+                                            'Scaled by sqrt(time_step_size).'},
+                  'offset': { 'anyOf': [ {'type': 'number'},
                                          { 'items': {'type': 'number'},
-                                           'type': 'array'}]},
-                  'params': { 'description': 'Optional parameter override dictionary '
-                                             'passed to PsyNeuLink.',
-                              'type': 'object'},
-                  'rate': { 'default': 1,
-                            'description': 'Scales the drift. In scalar mode: angular '
-                                           'velocity multiplier. In tangent mode: '
-                                           'scales the angular step. In target mode: '
-                                           'fraction of remaining geodesic distance '
-                                           'per step (1.0 = reach target in one step '
-                                           'with dt=1.0).',
-                            'oneOf': [ {'type': 'number'},
-                                       {'items': {'type': 'number'}, 'type': 'array'}]},
-                  'seed': { 'description': 'Integer seed for the internal random '
-                                           'number generator. Omit for '
-                                           'non-reproducible noise.',
+                                           'type': 'array'}],
+                              'default': 0,
+                              'description': 'Additive drift term, projected into the '
+                                             'tangent space. Prefer a scalar. If you '
+                                             'pass an array its length MUST equal '
+                                             "default_variable's length (PNL validates "
+                                             'this — passing length d-1 alongside a '
+                                             'length-d default_variable, or vice '
+                                             'versa, raises FunctionError).'},
+                  'rate': { 'anyOf': [ {'type': 'number'},
+                                       {'items': {'type': 'number'}, 'type': 'array'}],
+                            'default': 1,
+                            'description': 'Angular velocity scaling. Scalar, or 1d '
+                                           'array matching default_variable length. In '
+                                           'target mode, rate=1.0 with '
+                                           'time_step_size=1.0 reaches the target in '
+                                           'one step; 0<rate<1 moves partway.'},
+                  'seed': { 'description': 'Seed for the internal RandomState used for '
+                                           'diffusion noise.',
                             'type': 'integer'},
                   'time_step_size': { 'default': 1,
-                                      'description': 'Integration time step dt. Drift '
-                                                     'scales as dt; noise scales as '
-                                                     'sqrt(dt).',
+                                      'description': 'Integration step dt. Drift '
+                                                     'contributes dt * drift_tangent; '
+                                                     'noise contributes sqrt(dt) * '
+                                                     'noise_tangent.',
                                       'type': 'number'}},
-  'required': [],
+  'required': ['dimension'],
   'type': 'object'}
-TOOL_NOTES = '- `input_space` is not listed in the class signature but is accepted as a kwarg and controls tangent vs. target drift mode — set it explicitly to avoid the auto-detection RuntimeWarning.\n- In target mode with rate=1.0 and time_step_size=1.0, the integrator reaches the target in exactly one step; use 0 < rate < 1 for gradual movement.\n- `noise` array length must be dimension-1 (tangent coords), NOT dimension — passing an array of length dimension raises FunctionError.\n- `initializer` of length dimension is treated as Cartesian (normalized); length dimension-1 is treated as hyperspherical angles, not Cartesian.\n- The drift direction (`drift_dir`) for scalar inputs is initialized randomly and parallel-transported each step; results are not reproducible without `seed`.\n- `dimension` is read-only after construction; to change dimension, create a new instance.\n- `offset` is described as additive but is projected into tangent space — it does not shift the output in Euclidean space.\n- Scalar drift input scales the persistent drift direction vector, not the angle directly; the effective rotation magnitude is rate * |variable| * dt radians.'
+TOOL_NOTES = "PNL parameter-length validation gotcha (root cause of the recent feedback issue): the parent `IntegratorFunction._validate_params` enforces that EVERY array-valued parameter (rate/noise/offset) has the same length as `default_variable`. This conflicts with the mathematical convention that offset/noise live in the tangent space (length d-1) while a target-mode default_variable has length d. Safe recipes: (a) keep offset/rate as scalars whenever possible; (b) if you pass an array offset, make its length exactly match default_variable; (c) for target mode (input_space='target', default_variable length d), only scalar offset is reliable. Other things to know: previous_value is always re-normalized to unit length; in target mode the magnitude of `variable` is ignored (it is projected to the sphere); a scalar `variable` drives a persistent `drift_dir` that is parallel-transported each step; 'auto' input_space emits a one-time RuntimeWarning when it interprets a length-d vector as a target — set input_space explicitly to silence it; `dimension` is read-only after construction and must be >= 2; antipodal target points pick an arbitrary tangent direction via Householder basis."
 
 
 def _impl(kwargs: dict[str, Any]) -> Any:
@@ -110,5 +135,5 @@ def _impl(kwargs: dict[str, Any]) -> Any:
 def register(mcp: Any) -> None:
     @captured_tool(mcp, layer="generated", name=TOOL_NAME, description=TOOL_DESCRIPTION)
     def create_drift_on_a_sphere_integrator(args: dict[str, Any] | None = None) -> Any:
-        'Use this tool to create a DriftOnASphereIntegrator when you need geometric Brownian motion on a unit sphere S^(d-1) — e.g., modeling neural population states that evolve on a spherical manifold.'
+        'Build a `DriftOnASphereIntegrator` function for use inside a Mechanism (typically an IntegratorMechanism).'
         return _impl(args or {})
