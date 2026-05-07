@@ -90,10 +90,20 @@ def _candidate_dirs(root: Path) -> list[Path]:
     full reproductions of published cognitive models. We also check
     a couple of other library dirs so domain-specific patterns
     (composition wiring, learning, etc.) get surfaced.
+
+    When the override (``$PSYNEULINK_MCP_EXAMPLES_DIR``) points at a
+    full PsyNeuLink source checkout (not just the installed wheel),
+    additionally walk ``Scripts/Models (Under Development)/`` — many
+    canonical recipes for newer mechanisms (DriftOnASphereIntegrator,
+    EMComposition usages from EGO / nback / Beukers, ...) live there
+    and never made it into the installed package's ``library/``.
     """
     candidates = [
         root / "library" / "models",
         root / "library" / "compositions",
+        # Only present in a full source checkout; harmlessly skipped
+        # when ``root`` is the installed wheel.
+        root / "Scripts" / "Models (Under Development)",
     ]
     return [p for p in candidates if p.is_dir()]
 
@@ -156,8 +166,11 @@ def find_examples_for(
     pattern = _word_re(short_name)
     snippets: list[ExampleSnippet] = []
     for d in _candidate_dirs(root):
-        # Sort for deterministic prompt output across runs.
-        for path in sorted(d.glob("*.py")):
+        # Sort for deterministic prompt output across runs. The
+        # Scripts/Models tree is nested (EGO/, nback/, ...) so we
+        # recurse there; the library/ dirs are flat but globbing
+        # recursively is harmless on them.
+        for path in sorted(d.rglob("*.py")):
             if path.name.startswith("__"):
                 continue
             try:

@@ -317,6 +317,71 @@ def _render_composition_method(
     return f"{comp_var}.{name}({kwargs_src})"
 
 
+def _render_composition_introspection(
+    entry: handles.JournalEntry, var_map: dict[str, str]
+) -> str | None:
+    """Render one inner-node / port lookup as a Python assignment.
+
+    Without this the exporter previously rendered an `add_projection`
+    line that referenced (e.g.) `stimulus_query` as receiver but never
+    emitted the `stimulus_query = em.nodes['stimulus [QUERY]']` that
+    defined it. The exported `.py` then raised `NameError` on import
+    even though the journal block at the bottom replayed fine.
+
+    Handles three curated tools (all in
+    ``tools/curated/composition_introspection.py``):
+
+    * ``get_composition_node(composition, node_name)`` →
+      ``<var> = <comp_var>.nodes['<node_name>']``
+    * ``get_input_port(node, port)`` →
+      ``<var> = <node_var>.input_ports[<port_spec>]``
+    * ``get_output_port(node, port)`` →
+      ``<var> = <node_var>.output_ports[<port_spec>]``
+
+    ``port`` may be a string (port name) or an all-digit string
+    (index — the curated tool's ``_coerce_port_spec`` parses these
+    as ints, and we mirror that here so the rendered subscript
+    matches what was actually called).
+
+    Returns ``None`` when the entry can't be rendered safely (handle
+    missing from ``var_map``, args mis-shaped, …) — caller skips it
+    and the journal-replay path stays available as a fallback.
+    """
+    if not entry.result_handle or entry.result_handle not in var_map:
+        return None
+    var = var_map[entry.result_handle]
+    args = entry.args
+    name = entry.tool_name
+    if name == "get_composition_node":
+        comp_handle = args.get("composition")
+        node_name = args.get("node_name")
+        if not isinstance(comp_handle, str) or comp_handle not in var_map:
+            return None
+        if not isinstance(node_name, str):
+            return None
+        comp_var = var_map[comp_handle]
+        return f"{var} = {comp_var}.nodes[{node_name!r}]"
+    if name in ("get_input_port", "get_output_port"):
+        node_handle = args.get("node")
+        port = args.get("port")
+        if not isinstance(node_handle, str) or node_handle not in var_map:
+            return None
+        node_var = var_map[node_handle]
+        attr = "input_ports" if name == "get_input_port" else "output_ports"
+        # Mirror _coerce_port_spec from composition_introspection.py:
+        # a digit-only string was passed-as-int internally, so the
+        # rendered subscript should be the bare int too.
+        if isinstance(port, str):
+            stripped = port.strip()
+            if stripped.isdigit() or (stripped.startswith("-") and stripped[1:].isdigit()):
+                return f"{var} = {node_var}.{attr}[{int(stripped)}]"
+            return f"{var} = {node_var}.{attr}[{stripped!r}]"
+        if isinstance(port, int):
+            return f"{var} = {node_var}.{attr}[{port}]"
+        return None
+    return None
+
+
 def _render_run(
     entry: handles.JournalEntry, var_map: dict[str, str]
 ) -> tuple[str, str] | None:
@@ -435,6 +500,22 @@ def _render_script(
                     call_line, comp_var = rendered
                     run_lines.append(call_line)
                     run_lines.append(f'print("results:", {comp_var}.results)')
+                    n_operations += 1
+                continue
+            if entry.tool_name in (
+                "get_composition_node",
+                "get_input_port",
+                "get_output_port",
+            ):
+                # Inner-node / port lookups happen after the parent
+                # composition / mechanism is created and BEFORE any
+                # add_projection that uses them as sender/receiver.
+                # Append in journal order so the rendered script
+                # defines the variable before any later wiring line
+                # references it.
+                line = _render_composition_introspection(entry, var_map)
+                if line is not None:
+                    mutation_lines.append(line)
                     n_operations += 1
 
     handle_summary = ", ".join(sorted(var_map))
